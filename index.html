@@ -4,12 +4,14 @@
   <meta charset="UTF-8" />
   <title>EatSure – MVP</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Barkod okuma kütüphanesi -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;">
 
   <h1>EatSure</h1>
 
-  <p>Barkod numarasını gir:</p>
+  <p>Barkod numarasını gir veya kamerayla tara:</p>
 
   <input
     type="text"
@@ -21,12 +23,20 @@
   <br><br>
 
   <button
-    id="scanBtn"
     onclick="scanProduct()"
     style="font-size:16px; padding:10px 16px;"
   >
     Sorgula
   </button>
+
+  <button
+    onclick="startCameraScan()"
+    style="font-size:16px; padding:10px 16px; margin-left:8px;"
+  >
+    📷 Kamera ile tara
+  </button>
+
+  <div id="reader" style="width:100%; max-width:320px; margin-top:16px;"></div>
 
   <div
     id="result"
@@ -36,12 +46,40 @@
   <div id="actions" style="margin-top:16px;"></div>
 
   <script>
+    let html5QrCode;
+
     function resetForNextScan() {
       document.getElementById("barcodeInput").value = "";
       document.getElementById("result").innerHTML = "";
       document.getElementById("result").style.background = "transparent";
       document.getElementById("actions").innerHTML = "";
+      document.getElementById("reader").innerHTML = "";
       document.getElementById("barcodeInput").focus();
+
+      if (html5QrCode) {
+        html5QrCode.stop().catch(() => {});
+      }
+    }
+
+    function startCameraScan() {
+      const readerElem = document.getElementById("reader");
+      readerElem.innerHTML = "";
+
+      html5QrCode = new Html5Qrcode("reader");
+
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        (decodedText) => {
+          // Barkod okundu
+          document.getElementById("barcodeInput").value = decodedText;
+          html5QrCode.stop().catch(() => {});
+          scanProduct();
+        },
+        () => {}
+      ).catch(err => {
+        alert("Kamera açılamadı: " + err);
+      });
     }
 
     async function scanProduct() {
@@ -80,22 +118,22 @@
         if (decision.status === "safe" && decision.level === "certified") {
           title = "✅ Çölyak için uygundur";
           subtitle = "Bağımsız sertifikasyon programlarında yer almaktadır.";
-          bg = "#e7f6ea"; // yeşil
+          bg = "#e7f6ea";
         } 
         else if (decision.status === "declared_gluten_free") {
           title = "⚠️ Üretici beyanına göre glutensiz";
           subtitle = "Taranan sertifikasyon kaynaklarında doğrulanmış bir sertifika bulunamadı.";
-          bg = "#fff4d6"; // sarı
+          bg = "#fff4d6";
         } 
         else if (decision.status === "unsafe") {
           title = "❌ Çölyak için uygun değildir";
           subtitle = decision.reason || "Gluten riski tespit edildi.";
-          bg = "#fdecea"; // kırmızı
+          bg = "#fdecea";
         } 
         else {
           title = "❓ Bilgi yetersiz";
           subtitle = decision.reason || "Yeterli veri bulunamadı.";
-          bg = "#f0f0f0"; // gri
+          bg = "#f0f0f0";
         }
 
         resultBox.style.background = bg;
