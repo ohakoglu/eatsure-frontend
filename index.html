@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <title>EatSure – MVP</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Barkod okuma kütüphanesi -->
   <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;">
@@ -22,27 +21,18 @@
 
   <br><br>
 
-  <button
-    onclick="scanProduct()"
-    style="font-size:16px; padding:10px 16px;"
-  >
+  <button onclick="scanProduct()" style="font-size:16px; padding:10px 16px;">
     Sorgula
   </button>
 
-  <button
-    onclick="startCameraScan()"
-    style="font-size:16px; padding:10px 16px; margin-left:8px;"
-  >
+  <button onclick="startCameraScan()" style="font-size:16px; padding:10px 16px; margin-left:8px;">
     📷 Kamera ile tara
   </button>
 
   <div id="reader" style="width:100%; max-width:320px; margin-top:16px;"></div>
 
-  <div
-    id="result"
-    style="margin-top:20px; padding:14px; border-radius:8px;"
-  ></div>
-
+  <div id="result" style="margin-top:20px; padding:14px; border-radius:8px;"></div>
+  <div id="scopeNote" style="margin-top:8px; font-size:14px; color:#555;"></div>
   <div id="actions" style="margin-top:16px;"></div>
 
   <script>
@@ -51,6 +41,7 @@
     function resetForNextScan() {
       document.getElementById("barcodeInput").value = "";
       document.getElementById("result").innerHTML = "";
+      document.getElementById("scopeNote").innerHTML = "";
       document.getElementById("result").style.background = "transparent";
       document.getElementById("actions").innerHTML = "";
       document.getElementById("reader").innerHTML = "";
@@ -62,16 +53,13 @@
     }
 
     function startCameraScan() {
-      const readerElem = document.getElementById("reader");
-      readerElem.innerHTML = "";
-
+      document.getElementById("reader").innerHTML = "";
       html5QrCode = new Html5Qrcode("reader");
 
       html5QrCode.start(
         { facingMode: "environment" },
         { fps: 10, qrbox: 250 },
         (decodedText) => {
-          // Barkod okundu
           document.getElementById("barcodeInput").value = decodedText;
           html5QrCode.stop().catch(() => {});
           scanProduct();
@@ -85,9 +73,11 @@
     async function scanProduct() {
       const barcode = document.getElementById("barcodeInput").value;
       const resultBox = document.getElementById("result");
+      const scopeBox = document.getElementById("scopeNote");
       const actionsBox = document.getElementById("actions");
 
       actionsBox.innerHTML = "";
+      scopeBox.innerHTML = "";
 
       if (!barcode) {
         resultBox.style.background = "#eee";
@@ -113,26 +103,31 @@
 
         let title = "";
         let subtitle = "";
+        let scopeText = "";
         let bg = "#eee";
 
         if (decision.status === "safe" && decision.level === "certified") {
           title = "✅ Çölyak için uygundur";
           subtitle = "Bağımsız sertifikasyon programlarında yer almaktadır.";
+          scopeText = "Bu değerlendirme, markaya ait sertifikasyon bilgilerine dayanmaktadır.";
           bg = "#e7f6ea";
         } 
         else if (decision.status === "declared_gluten_free") {
           title = "⚠️ Üretici beyanına göre glutensiz";
           subtitle = "Taranan sertifikasyon kaynaklarında doğrulanmış bir sertifika bulunamadı.";
+          scopeText = "Bu bilgi üretici beyanına dayanmaktadır.";
           bg = "#fff4d6";
         } 
         else if (decision.status === "unsafe") {
           title = "❌ Çölyak için uygun değildir";
           subtitle = decision.reason || "Gluten riski tespit edildi.";
+          scopeText = "Bu değerlendirme ürün içeriği ve uyarılara dayanmaktadır.";
           bg = "#fdecea";
         } 
         else {
           title = "❓ Bilgi yetersiz";
           subtitle = decision.reason || "Yeterli veri bulunamadı.";
+          scopeText = "Bu ürün için yeterli doğrulanabilir bilgiye ulaşılamadı.";
           bg = "#f0f0f0";
         }
 
@@ -141,12 +136,10 @@
           <h2 style="margin-top:0;">${title}</h2>
           <p>${subtitle}</p>
         `;
+        scopeBox.innerHTML = scopeText;
 
         actionsBox.innerHTML = `
-          <button
-            onclick="resetForNextScan()"
-            style="font-size:16px; padding:10px 16px;"
-          >
+          <button onclick="resetForNextScan()" style="font-size:16px; padding:10px 16px;">
             Yeni ürün tara
           </button>
         `;
