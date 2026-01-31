@@ -27,10 +27,10 @@
     Sorgula
   </button>
 
-  <pre
+  <div
     id="result"
-    style="margin-top:20px; background:#f5f5f5; padding:10px; white-space:pre-wrap;"
-  ></pre>
+    style="margin-top:20px; background:#f5f5f5; padding:14px;"
+  ></div>
 
   <script>
     async function scanProduct() {
@@ -38,11 +38,11 @@
       const resultBox = document.getElementById("result");
 
       if (!barcode) {
-        resultBox.textContent = "Lütfen barkod gir.";
+        resultBox.innerHTML = "<p>Lütfen barkod gir.</p>";
         return;
       }
 
-      resultBox.textContent = "Ürün bilgileri kontrol ediliyor…";
+      resultBox.innerHTML = "<p>Ürün bilgileri kontrol ediliyor…</p>";
 
       try {
         const response = await fetch(
@@ -50,9 +50,40 @@
         );
         const data = await response.json();
 
-        resultBox.textContent = JSON.stringify(data, null, 2);
+        const decision = data.decision;
+
+        if (!decision) {
+          resultBox.innerHTML = "<p>Karar bilgisi alınamadı.</p>";
+          return;
+        }
+
+        let title = "";
+        let subtitle = "";
+
+        if (decision.status === "safe" && decision.level === "certified") {
+          title = "✅ Çölyak için uygundur";
+          subtitle = "Sertifikalı ürün";
+        } 
+        else if (decision.status === "declared_gluten_free") {
+          title = "⚠️ Üretici beyanına göre glutensiz";
+          subtitle = "Bağımsız sertifika bilgisi bulunamadı";
+        } 
+        else if (decision.status === "unsafe") {
+          title = "❌ Çölyak için uygun değildir";
+          subtitle = decision.reason || "";
+        } 
+        else {
+          title = "❓ Bilgi yetersiz";
+          subtitle = decision.reason || "Yeterli veri bulunamadı";
+        }
+
+        resultBox.innerHTML = `
+          <h2>${title}</h2>
+          <p>${subtitle}</p>
+        `;
+
       } catch (error) {
-        resultBox.textContent = "Bir hata oluştu.";
+        resultBox.innerHTML = "<p>Bir hata oluştu.</p>";
       }
     }
   </script>
