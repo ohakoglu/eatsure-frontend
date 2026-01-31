@@ -5,7 +5,7 @@
   <title>EatSure – MVP</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 </head>
-<body>
+<body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;">
 
   <h1>EatSure</h1>
 
@@ -21,6 +21,7 @@
   <br><br>
 
   <button
+    id="scanBtn"
     onclick="scanProduct()"
     style="font-size:16px; padding:10px 16px;"
   >
@@ -29,19 +30,34 @@
 
   <div
     id="result"
-    style="margin-top:20px; background:#f5f5f5; padding:14px;"
+    style="margin-top:20px; padding:14px; border-radius:8px;"
   ></div>
 
+  <div id="actions" style="margin-top:16px;"></div>
+
   <script>
+    function resetForNextScan() {
+      document.getElementById("barcodeInput").value = "";
+      document.getElementById("result").innerHTML = "";
+      document.getElementById("result").style.background = "transparent";
+      document.getElementById("actions").innerHTML = "";
+      document.getElementById("barcodeInput").focus();
+    }
+
     async function scanProduct() {
       const barcode = document.getElementById("barcodeInput").value;
       const resultBox = document.getElementById("result");
+      const actionsBox = document.getElementById("actions");
+
+      actionsBox.innerHTML = "";
 
       if (!barcode) {
+        resultBox.style.background = "#eee";
         resultBox.innerHTML = "<p>Lütfen barkod gir.</p>";
         return;
       }
 
+      resultBox.style.background = "#f5f5f5";
       resultBox.innerHTML = "<p>Ürün bilgileri kontrol ediliyor…</p>";
 
       try {
@@ -49,40 +65,56 @@
           "https://eatsure-backend-4dkh.onrender.com/scan/" + barcode
         );
         const data = await response.json();
-
         const decision = data.decision;
 
         if (!decision) {
+          resultBox.style.background = "#eee";
           resultBox.innerHTML = "<p>Karar bilgisi alınamadı.</p>";
           return;
         }
 
         let title = "";
         let subtitle = "";
+        let bg = "#eee";
 
         if (decision.status === "safe" && decision.level === "certified") {
           title = "✅ Çölyak için uygundur";
-          subtitle = "Sertifikalı ürün";
+          subtitle = "Bağımsız sertifikasyon programlarında yer almaktadır.";
+          bg = "#e7f6ea"; // yeşil
         } 
         else if (decision.status === "declared_gluten_free") {
           title = "⚠️ Üretici beyanına göre glutensiz";
-          subtitle = "Bağımsız sertifika bilgisi bulunamadı";
+          subtitle = "Taranan sertifikasyon kaynaklarında doğrulanmış bir sertifika bulunamadı.";
+          bg = "#fff4d6"; // sarı
         } 
         else if (decision.status === "unsafe") {
           title = "❌ Çölyak için uygun değildir";
-          subtitle = decision.reason || "";
+          subtitle = decision.reason || "Gluten riski tespit edildi.";
+          bg = "#fdecea"; // kırmızı
         } 
         else {
           title = "❓ Bilgi yetersiz";
-          subtitle = decision.reason || "Yeterli veri bulunamadı";
+          subtitle = decision.reason || "Yeterli veri bulunamadı.";
+          bg = "#f0f0f0"; // gri
         }
 
+        resultBox.style.background = bg;
         resultBox.innerHTML = `
-          <h2>${title}</h2>
+          <h2 style="margin-top:0;">${title}</h2>
           <p>${subtitle}</p>
         `;
 
+        actionsBox.innerHTML = `
+          <button
+            onclick="resetForNextScan()"
+            style="font-size:16px; padding:10px 16px;"
+          >
+            Yeni ürün tara
+          </button>
+        `;
+
       } catch (error) {
+        resultBox.style.background = "#eee";
         resultBox.innerHTML = "<p>Bir hata oluştu.</p>";
       }
     }
