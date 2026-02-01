@@ -38,6 +38,23 @@
   <script>
     let html5QrCode;
 
+    // -------------------------
+    // EAN-13 CHECKSUM DOĞRULAMA
+    // -------------------------
+    function isValidEAN13(code) {
+      if (!/^\d{13}$/.test(code)) return false;
+
+      const digits = code.split("").map(Number);
+      const checksum = digits.pop();
+
+      const sum = digits.reduce((acc, digit, index) => {
+        return acc + digit * (index % 2 === 0 ? 1 : 3);
+      }, 0);
+
+      const calculated = (10 - (sum % 10)) % 10;
+      return checksum === calculated;
+    }
+
     function resetForNextScan() {
       document.getElementById("barcodeInput").value = "";
       document.getElementById("result").innerHTML = "";
@@ -71,7 +88,7 @@
     }
 
     async function scanProduct() {
-      const barcode = document.getElementById("barcodeInput").value;
+      const barcode = document.getElementById("barcodeInput").value.trim();
       const resultBox = document.getElementById("result");
       const scopeBox = document.getElementById("scopeNote");
       const actionsBox = document.getElementById("actions");
@@ -82,6 +99,15 @@
       if (!barcode) {
         resultBox.style.background = "#eee";
         resultBox.innerHTML = "<p>Lütfen barkod gir.</p>";
+        return;
+      }
+
+      if (!isValidEAN13(barcode)) {
+        resultBox.style.background = "#fff4d6";
+        resultBox.innerHTML = `
+          <h2>⚠️ Barkod net okunamadı</h2>
+          <p>Lütfen ışığı ayarlayıp tekrar deneyin veya barkodu elle girin.</p>
+        `;
         return;
       }
 
