@@ -21,7 +21,7 @@
 
   <br><br>
 
-  <button onclick="scanProduct()" style="font-size:16px; padding:10px 16px;">
+  <button onclick="scanProduct('manual')" style="font-size:16px; padding:10px 16px;">
     Sorgula
   </button>
 
@@ -39,7 +39,7 @@
     let html5QrCode;
 
     // -------------------------
-    // EAN-13 CHECKSUM DOĞRULAMA
+    // EAN-13 CHECKSUM
     // -------------------------
     function isValidEAN13(code) {
       if (!/^\d{13}$/.test(code)) return false;
@@ -79,7 +79,7 @@
         (decodedText) => {
           document.getElementById("barcodeInput").value = decodedText;
           html5QrCode.stop().catch(() => {});
-          scanProduct();
+          scanProduct("camera");
         },
         () => {}
       ).catch(err => {
@@ -87,7 +87,7 @@
       });
     }
 
-    async function scanProduct() {
+    async function scanProduct(source) {
       const barcode = document.getElementById("barcodeInput").value.trim();
       const resultBox = document.getElementById("result");
       const scopeBox = document.getElementById("scopeNote");
@@ -104,10 +104,18 @@
 
       if (!isValidEAN13(barcode)) {
         resultBox.style.background = "#fff4d6";
-        resultBox.innerHTML = `
-          <h2>⚠️ Barkod net okunamadı</h2>
-          <p>Lütfen ışığı ayarlayıp tekrar deneyin veya barkodu elle girin.</p>
-        `;
+
+        if (source === "camera") {
+          resultBox.innerHTML = `
+            <h2>⚠️ Barkod net okunamadı</h2>
+            <p>Lütfen ışığı ayarlayıp tekrar deneyin veya barkodu elle girin.</p>
+          `;
+        } else {
+          resultBox.innerHTML = `
+            <h2>⚠️ Girilen barkod geçerli görünmüyor</h2>
+            <p>Lütfen barkod numarasını kontrol edin.</p>
+          `;
+        }
         return;
       }
 
