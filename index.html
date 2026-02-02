@@ -39,6 +39,7 @@
   <script>
     let html5QrCode;
     let dotsInterval = null;
+    let slowNoticeTimeout = null;
 
     const CERTIFIER_LABELS = {
       GFCO: "GFCO (Gluten-Free Certification Organization)"
@@ -60,7 +61,8 @@
       stopDots();
       dotsInterval = setInterval(() => {
         dots = (dots + 1) % 4;
-        document.getElementById("loadingDots").textContent = ".".repeat(dots);
+        const el = document.getElementById("loadingDots");
+        if (el) el.textContent = ".".repeat(dots);
       }, 500);
     }
 
@@ -73,6 +75,7 @@
 
     function resetForNextScan() {
       stopDots();
+      clearTimeout(slowNoticeTimeout);
       barcodeInput.value = "";
       productInfo.innerHTML = "";
       result.innerHTML = "";
@@ -103,6 +106,7 @@
       productInfo.innerHTML = "";
       scopeNote.innerHTML = "";
       actions.innerHTML = "";
+      clearTimeout(slowNoticeTimeout);
 
       if (!barcode) {
         result.style.background = "#eee";
@@ -124,16 +128,23 @@
       `;
       startDots();
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      // ⏳ 8 saniye sonra “biraz uzun sürüyor” uyarısı
+      slowNoticeTimeout = setTimeout(() => {
+        result.innerHTML = `
+          <p>🔎 Barkod doğrulandı. Ürün aranıyor<span id="loadingDots"></span></p>
+          <p style="font-size:14px;color:#777;">
+            ⏳ Bu işlem normalden uzun sürüyor, lütfen bekleyin…
+          </p>
+        `;
+      }, 8000);
 
       try {
         const res = await fetch(
-          "https://eatsure-backend-4dkh.onrender.com/scan/" + barcode,
-          { signal: controller.signal }
+          "https://eatsure-backend-4dkh.onrender.com/scan/" + barcode
         );
-        clearTimeout(timeoutId);
+
         stopDots();
+        clearTimeout(slowNoticeTimeout);
 
         const data = await res.json();
 
@@ -179,11 +190,11 @@
         actions.innerHTML = `<button onclick="resetForNextScan()">Yeni ürün tara</button>`;
 
       } catch (err) {
-        clearTimeout(timeoutId);
         stopDots();
+        clearTimeout(slowNoticeTimeout);
         result.style.background = "#eee";
         result.innerHTML = `
-          <h2>⏱️ Bağlantı zaman aşımına uğradı</h2>
+          <h2>⚠️ Bağlantı hatası</h2>
           <p>Ürün veritabanına şu anda ulaşılamıyor. Lütfen tekrar deneyin.</p>
         `;
         actions.innerHTML = `<button onclick="resetForNextScan()">Yeni ürün tara</button>`;
