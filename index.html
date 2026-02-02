@@ -128,7 +128,6 @@
       `;
       startDots();
 
-      // ⏳ 8 saniye sonra “biraz uzun sürüyor” uyarısı
       slowNoticeTimeout = setTimeout(() => {
         result.innerHTML = `
           <p>🔎 Barkod doğrulandı. Ürün aranıyor<span id="loadingDots"></span></p>
@@ -145,6 +144,16 @@
 
         stopDots();
         clearTimeout(slowNoticeTimeout);
+
+        if (!res.ok) {
+          result.style.background = "#eee";
+          result.innerHTML = `
+            <h2>⚠️ Sunucu geçici olarak yanıt veremiyor</h2>
+            <p>Lütfen birkaç saniye sonra tekrar deneyin.</p>
+          `;
+          actions.innerHTML = `<button onclick="resetForNextScan()">Yeni ürün tara</button>`;
+          return;
+        }
 
         const data = await res.json();
 
@@ -195,7 +204,7 @@
         result.style.background = "#eee";
         result.innerHTML = `
           <h2>⚠️ Bağlantı hatası</h2>
-          <p>Ürün veritabanına şu anda ulaşılamıyor. Lütfen tekrar deneyin.</p>
+          <p>İnternet bağlantısı veya sunucuya erişimde sorun oluştu.</p>
         `;
         actions.innerHTML = `<button onclick="resetForNextScan()">Yeni ürün tara</button>`;
       }
