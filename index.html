@@ -38,6 +38,7 @@
 
   <script>
     let html5QrCode;
+    let dotsInterval = null;
 
     const CERTIFIER_LABELS = {
       GFCO: "GFCO (Gluten-Free Certification Organization)"
@@ -54,7 +55,24 @@
       return checksum === calculated;
     }
 
+    function startDots() {
+      let dots = 0;
+      stopDots();
+      dotsInterval = setInterval(() => {
+        dots = (dots + 1) % 4;
+        document.getElementById("loadingDots").textContent = ".".repeat(dots);
+      }, 500);
+    }
+
+    function stopDots() {
+      if (dotsInterval) {
+        clearInterval(dotsInterval);
+        dotsInterval = null;
+      }
+    }
+
     function resetForNextScan() {
+      stopDots();
       barcodeInput.value = "";
       productInfo.innerHTML = "";
       result.innerHTML = "";
@@ -101,66 +119,75 @@
       }
 
       result.style.background = "#f5f5f5";
-      result.innerHTML = "<p>🔎 Barkod doğrulandı. Ürün aranıyor…</p>";
+      result.innerHTML = `
+        <p>🔎 Barkod doğrulandı. Ürün aranıyor<span id="loadingDots"></span></p>
+      `;
+      startDots();
 
-      const res = await fetch(
-        "https://eatsure-backend-4dkh.onrender.com/scan/" + barcode
-      );
-      const data = await res.json();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      if (data.brand || data.name) {
-        productInfo.innerHTML = `${data.brand || ""} ${data.name || ""}`;
-      }
-
-      const d = data.decision;
-      if (!d) return;
-
-      let title="", subtitle="", bg="#eee", scope="";
-
-      // ✅ CERTIFIED
-      if (d.status === "safe" && d.level === "certified") {
-        title = "✅ Çölyak için uygundur";
-        bg = "#e7f6ea";
-
-        const labels = (d.sources || []).map(
-          id => CERTIFIER_LABELS[id] || id
+      try {
+        const res = await fetch(
+          "https://eatsure-backend-4dkh.onrender.com/scan/" + barcode,
+          { signal: controller.signal }
         );
+        clearTimeout(timeoutId);
+        stopDots();
 
-        subtitle = labels.length === 1
-          ? `${labels[0]} tarafından sertifikalandırılmıştır.`
-          : `${labels.join(" ve ")} tarafından sertifikalandırılmıştır.`;
+        const data = await res.json();
 
-        scope = "Değerlendirme marka bazlı sertifikasyon bilgilerine dayanmaktadır.";
+        if (data.brand || data.name) {
+          productInfo.innerHTML = `${data.brand || ""} ${data.name || ""}`;
+        }
+
+        const d = data.decision;
+        if (!d) throw new Error("decision_missing");
+
+        let title="", subtitle="", bg="#eee", scope="";
+
+        if (d.status === "safe" && d.level === "certified") {
+          title = "✅ Çölyak için uygundur";
+          bg = "#e7f6ea";
+          const labels = (d.sources || []).map(id => CERTIFIER_LABELS[id] || id);
+          subtitle = labels.length
+            ? `${labels.join(" ve ")} tarafından sertifikalandırılmıştır.`
+            : "Bağımsız sertifikasyon mevcuttur.";
+          scope = "Değerlendirme marka bazlı sertifikasyon bilgilerine dayanmaktadır.";
+        }
+        else if (d.status === "declared_gluten_free") {
+          title = "⚠️ Üretici beyanına göre glutensiz";
+          subtitle = d.reason || "";
+          bg = "#fff4d6";
+          scope = "Bilgi üretici beyanına dayanmaktadır.";
+        }
+        else if (d.status === "unsafe") {
+          title = "❌ Çölyak için uygun değildir";
+          subtitle = d.reason || "";
+          bg = "#fdecea";
+          scope = "Değerlendirme içerik analizine dayanmaktadır.";
+        }
+        else {
+          title = "❓ Bilgi yetersiz";
+          subtitle = d.reason || "";
+          bg = "#f0f0f0";
+        }
+
+        result.style.background = bg;
+        result.innerHTML = `<h2>${title}</h2><p>${subtitle}</p>`;
+        scopeNote.innerHTML = scope;
+        actions.innerHTML = `<button onclick="resetForNextScan()">Yeni ürün tara</button>`;
+
+      } catch (err) {
+        clearTimeout(timeoutId);
+        stopDots();
+        result.style.background = "#eee";
+        result.innerHTML = `
+          <h2>⏱️ Bağlantı zaman aşımına uğradı</h2>
+          <p>Ürün veritabanına şu anda ulaşılamıyor. Lütfen tekrar deneyin.</p>
+        `;
+        actions.innerHTML = `<button onclick="resetForNextScan()">Yeni ürün tara</button>`;
       }
-
-      // ⚠️ MANUFACTURER CLAIM
-      else if (d.status === "declared_gluten_free") {
-        title = "⚠️ Üretici beyanına göre glutensiz";
-        subtitle = d.reason || "";
-        bg = "#fff4d6";
-        scope = "Bilgi üretici beyanına dayanmaktadır.";
-      }
-
-      // ❌ UNSAFE (GLUTEN VAR)
-      else if (d.status === "unsafe") {
-        title = "❌ Çölyak için uygun değildir";
-        subtitle = d.reason || "Gluten içeren bileşen tespit edildi.";
-        bg = "#fdecea";
-        scope = "Değerlendirme içerik analizine dayanmaktadır.";
-      }
-
-      // ❓ UNKNOWN
-      else {
-        title = "❓ Bilgi yetersiz";
-        subtitle = d.reason || "Ürün hakkında yeterli doğrulanabilir bilgi bulunmamaktadır.";
-        bg = "#f0f0f0";
-      }
-
-      result.style.background = bg;
-      result.innerHTML = `<h2>${title}</h2><p>${subtitle}</p>`;
-      scopeNote.innerHTML = scope;
-
-      actions.innerHTML = `<button onclick="resetForNextScan()">Yeni ürün tara</button>`;
     }
   </script>
 
