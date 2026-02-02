@@ -80,7 +80,7 @@
           html5QrCode.stop().catch(() => {});
           scanProduct("camera");
         }
-      ).catch(err => alert("Kamera açılamadı"));
+      ).catch(() => alert("Kamera açılamadı"));
     }
 
     async function scanProduct(source) {
@@ -136,22 +136,30 @@
           title = "✅ Çölyak için uygundur";
           subtitle = "Bağımsız sertifikasyon programlarında yer almaktadır.";
           bg = "#e7f6ea";
-          scope = "Değerlendirme marka sertifikasyonuna dayanmaktadır.";
-        } else if (decision.status === "declared_gluten_free") {
+
+          if (Array.isArray(decision.sources) && decision.sources.length > 0) {
+            scope = `Sertifika programları: ${decision.sources.join(", ")}`;
+          } else {
+            scope = "Bağımsız sertifikasyon bilgisi mevcuttur.";
+          }
+        }
+        else if (decision.status === "declared_gluten_free") {
           title = "⚠️ Üretici beyanına göre glutensiz";
           subtitle = "Bağımsız sertifika bulunamadı.";
           bg = "#fff4d6";
           scope = "Bilgi üretici beyanına dayanmaktadır.";
-        } else if (decision.status === "unsafe") {
+        }
+        else if (decision.status === "unsafe") {
           title = "❌ Çölyak için uygun değildir";
           subtitle = decision.reason || "";
           bg = "#fdecea";
-          scope = "İçerik analizine dayanmaktadır.";
-        } else {
+          scope = "İçerik ve uyarılara dayanmaktadır.";
+        }
+        else {
           title = "❓ Bilgi yetersiz";
           subtitle = decision.reason || "";
           bg = "#f0f0f0";
-          scope = "Yeterli veri bulunamadı.";
+          scope = "Yeterli doğrulanabilir bilgi bulunamadı.";
         }
 
         resultBox.style.background = bg;
