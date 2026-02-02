@@ -103,7 +103,9 @@
       result.style.background = "#f5f5f5";
       result.innerHTML = "<p>🔎 Barkod doğrulandı. Ürün aranıyor…</p>";
 
-      const res = await fetch("https://eatsure-backend-4dkh.onrender.com/scan/" + barcode);
+      const res = await fetch(
+        "https://eatsure-backend-4dkh.onrender.com/scan/" + barcode
+      );
       const data = await res.json();
 
       if (data.brand || data.name) {
@@ -115,11 +117,12 @@
 
       let title="", subtitle="", bg="#eee", scope="";
 
-      if (d.status==="safe" && d.level==="certified") {
-        title="✅ Çölyak için uygundur";
-        bg="#e7f6ea";
+      // ✅ CERTIFIED
+      if (d.status === "safe" && d.level === "certified") {
+        title = "✅ Çölyak için uygundur";
+        bg = "#e7f6ea";
 
-        const labels = (d.sources||[]).map(
+        const labels = (d.sources || []).map(
           id => CERTIFIER_LABELS[id] || id
         );
 
@@ -127,18 +130,30 @@
           ? `${labels[0]} tarafından sertifikalandırılmıştır.`
           : `${labels.join(" ve ")} tarafından sertifikalandırılmıştır.`;
 
-        scope="Değerlendirme marka bazlı sertifikasyon bilgilerine dayanmaktadır.";
+        scope = "Değerlendirme marka bazlı sertifikasyon bilgilerine dayanmaktadır.";
       }
-      else if (d.status==="declared_gluten_free") {
-        title="⚠️ Üretici beyanına göre glutensiz";
-        subtitle="Bağımsız sertifika bulunamadı.";
-        bg="#fff4d6";
-        scope="Bilgi üretici beyanına dayanmaktadır.";
+
+      // ⚠️ MANUFACTURER CLAIM
+      else if (d.status === "declared_gluten_free") {
+        title = "⚠️ Üretici beyanına göre glutensiz";
+        subtitle = d.reason || "";
+        bg = "#fff4d6";
+        scope = "Bilgi üretici beyanına dayanmaktadır.";
       }
+
+      // ❌ UNSAFE (GLUTEN VAR)
+      else if (d.status === "unsafe") {
+        title = "❌ Çölyak için uygun değildir";
+        subtitle = d.reason || "Gluten içeren bileşen tespit edildi.";
+        bg = "#fdecea";
+        scope = "Değerlendirme içerik analizine dayanmaktadır.";
+      }
+
+      // ❓ UNKNOWN
       else {
-        title="❓ Bilgi yetersiz";
-        subtitle=d.reason||"";
-        bg="#f0f0f0";
+        title = "❓ Bilgi yetersiz";
+        subtitle = d.reason || "Ürün hakkında yeterli doğrulanabilir bilgi bulunmamaktadır.";
+        bg = "#f0f0f0";
       }
 
       result.style.background = bg;
