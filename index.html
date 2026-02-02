@@ -45,6 +45,10 @@
       GFCO: "GFCO (Gluten-Free Certification Organization)"
     };
 
+    function isNumericBarcode(code) {
+      return /^\d{8,14}$/.test(code);
+    }
+
     function isValidEAN13(code) {
       if (!/^\d{13}$/.test(code)) return false;
       const digits = code.split("").map(Number);
@@ -114,23 +118,31 @@
         return;
       }
 
-      if (!isValidEAN13(barcode)) {
+      if (!isNumericBarcode(barcode)) {
         result.style.background = "#fff4d6";
-        result.innerHTML = source === "camera"
-          ? "<h2>⚠️ Barkod net okunamadı</h2><p>Işığı ayarlayıp tekrar deneyin.</p>"
-          : "<h2>⚠️ Girilen barkod geçerli görünmüyor</h2><p>Numarayı kontrol edin.</p>";
+        result.innerHTML = "<h2>⚠️ Girilen barkod formatı geçerli değil</h2><p>Sadece rakam içermelidir.</p>";
         return;
+      }
+
+      let checksumWarning = "";
+      if (barcode.length === 13 && !isValidEAN13(barcode)) {
+        checksumWarning = `
+          <p style="font-size:14px;color:#777;">
+            ⚠️ Barkod doğrulaması kesin değil, yine de ürün aranıyor…
+          </p>
+        `;
       }
 
       result.style.background = "#f5f5f5";
       result.innerHTML = `
-        <p>🔎 Barkod doğrulandı. Ürün aranıyor<span id="loadingDots"></span></p>
+        <p>🔎 Barkod alındı. Ürün aranıyor<span id="loadingDots"></span></p>
+        ${checksumWarning}
       `;
       startDots();
 
       slowNoticeTimeout = setTimeout(() => {
         result.innerHTML = `
-          <p>🔎 Barkod doğrulandı. Ürün aranıyor<span id="loadingDots"></span></p>
+          <p>🔎 Barkod alındı. Ürün aranıyor<span id="loadingDots"></span></p>
           <p style="font-size:14px;color:#777;">
             ⏳ Bu işlem normalden uzun sürüyor, lütfen bekleyin…
           </p>
@@ -170,9 +182,7 @@
           title = "✅ Çölyak için uygundur";
           bg = "#e7f6ea";
           const labels = (d.sources || []).map(id => CERTIFIER_LABELS[id] || id);
-          subtitle = labels.length
-            ? `${labels.join(" ve ")} tarafından sertifikalandırılmıştır.`
-            : "Bağımsız sertifikasyon mevcuttur.";
+          subtitle = `${labels.join(" ve ")} tarafından sertifikalandırılmıştır.`;
           scope = "Değerlendirme marka bazlı sertifikasyon bilgilerine dayanmaktadır.";
         }
         else if (d.status === "declared_gluten_free") {
