@@ -34,6 +34,7 @@
   <div id="productInfo" style="margin-top:20px; font-weight:600;"></div>
   <div id="result" style="margin-top:10px; padding:14px; border-radius:8px;"></div>
   <div id="scopeNote" style="margin-top:8px; font-size:14px; color:#555;"></div>
+  <div id="evaluatedAtNote" style="margin-top:8px; font-size:13px; color:#777;"></div>
   <div id="actions" style="margin-top:16px;"></div>
 
   <script>
@@ -60,6 +61,18 @@
       return checksum === calculated;
     }
 
+    function formatDate(isoString) {
+      try {
+        const d = new Date(isoString);
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        return `${day}.${month}.${year}`;
+      } catch {
+        return null;
+      }
+    }
+
     function startDots() {
       let dots = 0;
       stopDots();
@@ -84,6 +97,7 @@
       productInfo.innerHTML = "";
       result.innerHTML = "";
       scopeNote.innerHTML = "";
+      evaluatedAtNote.innerHTML = "";
       result.style.background = "transparent";
       actions.innerHTML = "";
       reader.innerHTML = "";
@@ -109,6 +123,7 @@
       const barcode = barcodeInput.value.trim();
       productInfo.innerHTML = "";
       scopeNote.innerHTML = "";
+      evaluatedAtNote.innerHTML = "";
       actions.innerHTML = "";
       clearTimeout(slowNoticeTimeout);
 
@@ -125,30 +140,10 @@
         return;
       }
 
-      let checksumWarning = "";
-      if (barcode.length === 13 && !isValidEAN13(barcode)) {
-        checksumWarning = `
-          <p style="font-size:14px;color:#777;">
-            ⚠️ Barkod doğrulaması kesin değil, yine de ürün aranıyor…
-          </p>
-        `;
-      }
-
       result.style.background = "#f5f5f5";
-      result.innerHTML = `
-        <p>🔎 Barkod alındı. Ürün aranıyor<span id="loadingDots"></span></p>
-        ${checksumWarning}
-      `;
+      result.innerHTML =
+        `<p>🔎 Barkod alındı. Ürün aranıyor<span id="loadingDots"></span></p>`;
       startDots();
-
-      slowNoticeTimeout = setTimeout(() => {
-        result.innerHTML = `
-          <p>🔎 Barkod alındı. Ürün aranıyor<span id="loadingDots"></span></p>
-          <p style="font-size:14px;color:#777;">
-            ⏳ Bu işlem normalden uzun sürüyor, lütfen bekleyin…
-          </p>
-        `;
-      }, 8000);
 
       let data;
 
@@ -156,45 +151,23 @@
         const res = await fetch(
           "https://eatsure-backend-4dkh.onrender.com/scan/" + barcode
         );
-
-        if (!res.ok) {
-          throw new Error("http_error");
-        }
-
+        if (!res.ok) throw new Error();
         data = await res.json();
-      } catch (networkError) {
+      } catch {
         stopDots();
-        clearTimeout(slowNoticeTimeout);
         result.style.background = "#eee";
-        result.innerHTML = `
-          <h2>⚠️ Bağlantı hatası</h2>
-          <p>İnternet bağlantısı veya sunucuya erişimde sorun oluştu.</p>
-        `;
-        actions.innerHTML =
-          `<button onclick="resetForNextScan()">Yeni ürün tara</button>`;
+        result.innerHTML =
+          "<h2>⚠️ Bağlantı hatası</h2><p>Sunucuya ulaşılamıyor.</p>";
         return;
       }
 
-      // ⬇️ Buradan sonrası ARTIK bağlantı hatası değildir
       stopDots();
-      clearTimeout(slowNoticeTimeout);
 
       if (data.brand || data.name) {
         productInfo.innerHTML = `${data.brand || ""} ${data.name || ""}`;
       }
 
       const d = data.decision;
-
-      if (!d) {
-        result.style.background = "#f0f0f0";
-        result.innerHTML = `
-          <h2>❓ Bilgi yetersiz</h2>
-          <p>Ürün için yeterli karar verisi bulunamadı.</p>
-        `;
-        actions.innerHTML =
-          `<button onclick="resetForNextScan()">Yeni ürün tara</button>`;
-        return;
-      }
 
       let title="", subtitle="", bg="#eee", scope="";
 
@@ -226,6 +199,15 @@
       result.style.background = bg;
       result.innerHTML = `<h2>${title}</h2><p>${subtitle}</p>`;
       scopeNote.innerHTML = scope;
+
+      if (data.meta && data.meta.evaluatedAt) {
+        const formatted = formatDate(data.meta.evaluatedAt);
+        if (formatted) {
+          evaluatedAtNote.innerHTML =
+            `Bu değerlendirme, <strong>${formatted}</strong> tarihinde mevcut olan verilere göre oluşturulmuştur.`;
+        }
+      }
+
       actions.innerHTML =
         `<button onclick="resetForNextScan()">Yeni ürün tara</button>`;
     }
