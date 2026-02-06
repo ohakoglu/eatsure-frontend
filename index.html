@@ -40,69 +40,48 @@
   <script>
     let html5QrCode;
     let dotsInterval = null;
-    let slowNoticeTimeout = null;
 
-    const CERTIFIER_LABELS = {
-      GFCO: "GFCO (Gluten-Free Certification Organization)"
+    const LEVEL_UI = {
+      certified: {
+        title: "✅ Çölyak için uygundur",
+        color: "#2ecc71",
+        scope: "Değerlendirme geçerli glutensiz sertifikalara dayanmaktadır."
+      },
+      declared_gluten_free_with_ingredients: {
+        title: "🟢 Glutensiz (beyan + içerik)",
+        color: "#7bed9f",
+        scope: "Üretici beyanı ve içerik bilgisine dayanmaktadır."
+      },
+      declared_gluten_free: {
+        title: "🟡 Üretici beyanına göre glutensiz",
+        color: "#f1c40f",
+        scope: "Bilgi yalnızca üretici beyanına dayanmaktadır."
+      },
+      ingredients_safe_no_claim: {
+        title: "🟨 İçerik uygun, garanti yok",
+        color: "#f9e79f",
+        scope: "İçerik gluten içermemektedir ancak beyan veya sertifika yoktur."
+      },
+      declaration_conflict: {
+        title: "🟠 Çelişkili bilgi",
+        color: "#f39c12",
+        scope: "Üretici beyanı ile içerik bilgisi çelişmektedir."
+      },
+      gluten_present: {
+        title: "🔴 Çölyak için uygun değildir",
+        color: "#e74c3c",
+        scope: "İçerikte gluten veya gluten kaynağı bulunmaktadır."
+      },
+      insufficient_data: {
+        title: "⚪ Bilgi yetersiz",
+        color: "#ecf0f1",
+        scope: "Yeterli veri bulunmamaktadır."
+      }
     };
 
-    function isNumericBarcode(code) {
-      return /^\d{8,14}$/.test(code);
-    }
-
-    function isValidEAN13(code) {
-      if (!/^\d{13}$/.test(code)) return false;
-      const digits = code.split("").map(Number);
-      const checksum = digits.pop();
-      const sum = digits.reduce((acc, digit, index) => {
-        return acc + digit * (index % 2 === 0 ? 1 : 3);
-      }, 0);
-      const calculated = (10 - (sum % 10)) % 10;
-      return checksum === calculated;
-    }
-
-    function formatDate(isoString) {
-      try {
-        const d = new Date(isoString);
-        const day = String(d.getDate()).padStart(2, "0");
-        const month = String(d.getMonth() + 1).padStart(2, "0");
-        const year = d.getFullYear();
-        return `${day}.${month}.${year}`;
-      } catch {
-        return null;
-      }
-    }
-
-    function startDots() {
-      let dots = 0;
-      stopDots();
-      dotsInterval = setInterval(() => {
-        dots = (dots + 1) % 4;
-        const el = document.getElementById("loadingDots");
-        if (el) el.textContent = ".".repeat(dots);
-      }, 500);
-    }
-
-    function stopDots() {
-      if (dotsInterval) {
-        clearInterval(dotsInterval);
-        dotsInterval = null;
-      }
-    }
-
-    function resetForNextScan() {
-      stopDots();
-      clearTimeout(slowNoticeTimeout);
-      barcodeInput.value = "";
-      productInfo.innerHTML = "";
-      result.innerHTML = "";
-      scopeNote.innerHTML = "";
-      evaluatedAtNote.innerHTML = "";
-      result.style.background = "transparent";
-      actions.innerHTML = "";
-      reader.innerHTML = "";
-      barcodeInput.focus();
-      if (html5QrCode) html5QrCode.stop().catch(() => {});
+    function formatDate(iso) {
+      const d = new Date(iso);
+      return `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`;
     }
 
     function startCameraScan() {
@@ -113,103 +92,52 @@
         { fps: 10, qrbox: 250 },
         text => {
           barcodeInput.value = text;
-          html5QrCode.stop().catch(() => {});
-          scanProduct("camera");
+          html5QrCode.stop();
+          scanProduct();
         }
       );
     }
 
-    async function scanProduct(source) {
+    async function scanProduct() {
       const barcode = barcodeInput.value.trim();
       productInfo.innerHTML = "";
       scopeNote.innerHTML = "";
       evaluatedAtNote.innerHTML = "";
       actions.innerHTML = "";
-      clearTimeout(slowNoticeTimeout);
 
       if (!barcode) {
-        result.style.background = "#eee";
-        result.innerHTML = "<p>Lütfen barkod gir.</p>";
+        result.innerHTML = "Barkod giriniz.";
         return;
       }
 
-      if (!isNumericBarcode(barcode)) {
-        result.style.background = "#fff4d6";
-        result.innerHTML =
-          "<h2>⚠️ Girilen barkod formatı geçerli değil</h2><p>Sadece rakam içermelidir.</p>";
-        return;
-      }
-
-      result.style.background = "#f5f5f5";
-      result.innerHTML =
-        `<p>🔎 Barkod alındı. Ürün aranıyor<span id="loadingDots"></span></p>`;
-      startDots();
+      result.innerHTML = "🔎 Ürün aranıyor…";
 
       let data;
-
       try {
-        const res = await fetch(
-          "https://eatsure-backend-4dkh.onrender.com/scan/" + barcode
-        );
-        if (!res.ok) throw new Error();
+        const res = await fetch("https://eatsure-backend-4dkh.onrender.com/scan/" + barcode);
         data = await res.json();
       } catch {
-        stopDots();
-        result.style.background = "#eee";
-        result.innerHTML =
-          "<h2>⚠️ Bağlantı hatası</h2><p>Sunucuya ulaşılamıyor.</p>";
+        result.innerHTML = "Sunucuya ulaşılamıyor.";
         return;
       }
-
-      stopDots();
 
       if (data.brand || data.name) {
         productInfo.innerHTML = `${data.brand || ""} ${data.name || ""}`;
       }
 
-      const d = data.decision;
+      const level = data.decision?.level || "insufficient_data";
+      const ui = LEVEL_UI[level] || LEVEL_UI.insufficient_data;
 
-      let title="", subtitle="", bg="#eee", scope="";
+      result.style.background = ui.color;
+      result.innerHTML = `<h2>${ui.title}</h2><p>${data.decision?.reason || ""}</p>`;
+      scopeNote.innerHTML = ui.scope;
 
-      if (d.status === "safe" && d.level === "certified") {
-        title = "✅ Çölyak için uygundur";
-        bg = "#e7f6ea";
-        const labels = (d.sources || []).map(id => CERTIFIER_LABELS[id] || id);
-        subtitle = `${labels.join(" ve ")} tarafından sertifikalandırılmıştır.`;
-        scope = "Değerlendirme marka bazlı sertifikasyon bilgilerine dayanmaktadır.";
-      }
-      else if (d.status === "declared_gluten_free") {
-        title = "⚠️ Üretici beyanına göre glutensiz";
-        subtitle = d.reason || "";
-        bg = "#fff4d6";
-        scope = "Bilgi üretici beyanına dayanmaktadır.";
-      }
-      else if (d.status === "unsafe") {
-        title = "❌ Çölyak için uygun değildir";
-        subtitle = d.reason || "";
-        bg = "#fdecea";
-        scope = "Değerlendirme içerik analizine dayanmaktadır.";
-      }
-      else {
-        title = "❓ Bilgi yetersiz";
-        subtitle = d.reason || "";
-        bg = "#f0f0f0";
+      if (data.meta?.evaluatedAt) {
+        evaluatedAtNote.innerHTML =
+          `Bu değerlendirme, <strong>${formatDate(data.meta.evaluatedAt)}</strong> tarihinde mevcut olan verilere göre oluşturulmuştur.`;
       }
 
-      result.style.background = bg;
-      result.innerHTML = `<h2>${title}</h2><p>${subtitle}</p>`;
-      scopeNote.innerHTML = scope;
-
-      if (data.meta && data.meta.evaluatedAt) {
-        const formatted = formatDate(data.meta.evaluatedAt);
-        if (formatted) {
-          evaluatedAtNote.innerHTML =
-            `Bu değerlendirme, <strong>${formatted}</strong> tarihinde mevcut olan verilere göre oluşturulmuştur.`;
-        }
-      }
-
-      actions.innerHTML =
-        `<button onclick="resetForNextScan()">Yeni ürün tara</button>`;
+      actions.innerHTML = `<button onclick="location.reload()">Yeni ürün tara</button>`;
     }
   </script>
 
