@@ -53,9 +53,10 @@
         scope: "Değerlendirme üreticinin glutensiz beyanına dayanmaktadır."
       },
 
+      // 🔧 DEĞİŞİKLİK #1: daha temkinli sarı
       declared_gf_no_ingredients: {
         title: "🟡 Üretici beyanına göre glutensiz",
-        color: "#f1c40f",
+        color: "#fde68a",
         scope: "Bilgi yalnızca üretici beyanına dayanmaktadır."
       },
 
@@ -103,6 +104,18 @@
       );
     }
 
+    // 🔧 DEĞİŞİKLİK #2: sayfa yenilemeden reset
+    function resetForNextScan() {
+      productInfo.innerHTML = "";
+      result.innerHTML = "";
+      scopeNote.innerHTML = "";
+      evaluatedAtNote.innerHTML = "";
+      actions.innerHTML = "";
+      barcodeInput.value = "";
+      reader.innerHTML = "";
+      barcodeInput.focus();
+    }
+
     async function scanProduct() {
       const barcode = barcodeInput.value.trim();
       productInfo.innerHTML = "";
@@ -135,8 +148,7 @@
 
       let description = data.decision?.reason || "";
 
-      // 🔒 KRİTİK DÜZELTME:
-      // Beyan varsa içerikten HİÇ bahsetme
+      // 🔒 GF beyanı varsa içerikten bahsetme
       if (level === "declared_gf_with_ingredients" || level === "declared_gf_no_ingredients") {
         description = "Üretici ürünü glutensiz olarak beyan etmektedir.";
       }
@@ -150,7 +162,7 @@
           `Bu değerlendirme, <strong>${formatDate(data.meta.evaluatedAt)}</strong> tarihinde mevcut olan verilere göre oluşturulmuştur.`;
       }
 
-      actions.innerHTML = `<button onclick="location.reload()">Yeni ürün tara</button>`;
+      actions.innerHTML = `<button onclick="resetForNextScan()">Yeni ürün tara</button>`;
     }
   </script>
 
