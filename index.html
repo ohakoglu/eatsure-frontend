@@ -133,8 +133,16 @@
       const level = data.decision?.level || "insufficient_data";
       const ui = LEVEL_UI[level] || LEVEL_UI.insufficient_data;
 
+      let description = data.decision?.reason || "";
+
+      // 🔒 KRİTİK DÜZELTME:
+      // Beyan varsa içerikten HİÇ bahsetme
+      if (level === "declared_gf_with_ingredients" || level === "declared_gf_no_ingredients") {
+        description = "Üretici ürünü glutensiz olarak beyan etmektedir.";
+      }
+
       result.style.background = ui.color;
-      result.innerHTML = `<h2>${ui.title}</h2><p>${data.decision?.reason || ""}</p>`;
+      result.innerHTML = `<h2>${ui.title}</h2><p>${description}</p>`;
       scopeNote.innerHTML = ui.scope;
 
       if (data.meta?.evaluatedAt) {
