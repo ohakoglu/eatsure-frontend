@@ -21,7 +21,7 @@
 
   <br><br>
 
-  <button onclick="scanProduct('manual')" style="font-size:16px; padding:10px 16px;">
+  <button onclick="scanProduct()" style="font-size:16px; padding:10px 16px;">
     Sorgula
   </button>
 
@@ -39,7 +39,6 @@
 
   <script>
     let html5QrCode;
-    let dotsInterval = null;
 
     const LEVEL_UI = {
       certified: {
@@ -47,35 +46,41 @@
         color: "#2ecc71",
         scope: "Değerlendirme geçerli glutensiz sertifikalara dayanmaktadır."
       },
-      declared_gluten_free_with_ingredients: {
-        title: "🟢 Glutensiz (beyan + içerik)",
+
+      declared_gf_with_ingredients: {
+        title: "🟢 Üretici beyanına göre glutensiz",
         color: "#7bed9f",
-        scope: "Üretici beyanı ve içerik bilgisine dayanmaktadır."
+        scope: "Değerlendirme üreticinin glutensiz beyanına dayanmaktadır."
       },
-      declared_gluten_free: {
+
+      declared_gf_no_ingredients: {
         title: "🟡 Üretici beyanına göre glutensiz",
         color: "#f1c40f",
         scope: "Bilgi yalnızca üretici beyanına dayanmaktadır."
       },
+
       ingredients_safe_no_claim: {
         title: "🟨 İçerik uygun, garanti yok",
         color: "#f9e79f",
-        scope: "İçerik gluten içermemektedir ancak beyan veya sertifika yoktur."
+        scope: "İçerik analizinde gluten kaynağı tespit edilmemiştir ancak üretici beyanı veya sertifika yoktur."
       },
+
       declaration_conflict: {
         title: "🟠 Çelişkili bilgi",
         color: "#f39c12",
         scope: "Üretici beyanı ile içerik bilgisi çelişmektedir."
       },
+
       gluten_present: {
         title: "🔴 Çölyak için uygun değildir",
         color: "#e74c3c",
-        scope: "İçerikte gluten veya gluten kaynağı bulunmaktadır."
+        scope: "Ürün içeriğinde gluten veya gluten kaynağı bulunmaktadır."
       },
+
       insufficient_data: {
         title: "⚪ Bilgi yetersiz",
         color: "#ecf0f1",
-        scope: "Yeterli veri bulunmamaktadır."
+        scope: "Ürün hakkında karar vermek için yeterli veri bulunmamaktadır."
       }
     };
 
