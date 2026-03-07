@@ -7,6 +7,8 @@ const stopCameraBtn = document.getElementById("stopCameraBtn");
 
 const readerEl = document.getElementById("reader");
 
+const photoSection = document.getElementById("photoSection");
+
 const fileInput = document.getElementById("fileInput");
 const previewImg = document.getElementById("previewImg");
 
@@ -17,31 +19,57 @@ const ocrTextEl = document.getElementById("ocrText");
 const backendResultEl = document.getElementById("backendResult");
 const userResultEl = document.getElementById("userResult");
 
+const toggleDebugBtn = document.getElementById("toggleDebugBtn");
+const debugPanel = document.getElementById("debugPanel");
+
 let selectedFile = null;
 let html5QrCode = null;
 let cameraRunning = false;
 
-/* ----------------------------- */
-/* Backend helper                */
-/* ----------------------------- */
+/* -------------------------------- */
+/* Helpers */
+/* -------------------------------- */
 
 function getBaseUrl() {
   return BACKEND_BASE.replace(/\/+$/, "");
 }
 
-function setBackendResult(objOrText) {
-  if (typeof objOrText === "string") {
-    backendResultEl.textContent = objOrText;
+function setBackendResult(data) {
+  if (typeof data === "string") {
+    backendResultEl.textContent = data;
   } else {
-    backendResultEl.textContent = JSON.stringify(objOrText, null, 2);
+    backendResultEl.textContent = JSON.stringify(data, null, 2);
   }
 }
 
-/* ----------------------------- */
-/* Kullanıcı sonucu              */
-/* ----------------------------- */
+function showPhotoSection() {
+  photoSection.classList.remove("hidden");
+}
+
+/* -------------------------------- */
+/* Debug panel */
+/* -------------------------------- */
+
+toggleDebugBtn.addEventListener("click", () => {
+
+  const hidden = debugPanel.classList.contains("hidden");
+
+  if (hidden) {
+    debugPanel.classList.remove("hidden");
+    toggleDebugBtn.textContent = "Debug Bilgilerini Gizle";
+  } else {
+    debugPanel.classList.add("hidden");
+    toggleDebugBtn.textContent = "Debug Bilgilerini Göster";
+  }
+
+});
+
+/* -------------------------------- */
+/* Kullanıcı sonucu */
+/* -------------------------------- */
 
 const LEVEL_UI = {
+
   certified: {
     title: "✅ Çölyak için uygundur",
     color: "#dcfce7"
@@ -76,11 +104,14 @@ const LEVEL_UI = {
     title: "⚪ Bilgi yetersiz",
     color: "#f3f4f6"
   }
+
 };
 
 function renderUserResult(data) {
+
   const level = data?.decision?.level || "insufficient_data";
   const ui = LEVEL_UI[level] || LEVEL_UI.insufficient_data;
+
   const reason = data?.decision?.reason || "";
   const brand = data?.brand || "";
   const name = data?.name || "";
@@ -92,13 +123,15 @@ function renderUserResult(data) {
     <p><strong>${[brand, name].filter(Boolean).join(" / ")}</strong></p>
     <p>${reason}</p>
   `;
+
 }
 
-/* ----------------------------- */
-/* Barkod sorgulama              */
-/* ----------------------------- */
+/* -------------------------------- */
+/* Barkod sorgulama */
+/* -------------------------------- */
 
 async function scanProduct() {
+
   const barcode = (barcodeInputEl.value || "").trim();
 
   if (!barcode) {
@@ -109,59 +142,91 @@ async function scanProduct() {
   setBackendResult("Ürün aranıyor...");
 
   try {
+
     const r = await fetch(`${getBaseUrl()}/scan/${barcode}`);
     const data = await r.json();
 
     setBackendResult(data);
     renderUserResult(data);
+
+    const level = data?.decision?.level;
+
+    if (level === "insufficient_data") {
+
+      showPhotoSection();
+
+      userResultEl.innerHTML += `
+        <p class="muted small">
+        Daha iyi değerlendirme yapabilmemiz için etiket fotoğrafı yükleyebilirsiniz.
+        </p>
+      `;
+
+    }
+
   } catch (e) {
+
     setBackendResult("Backend hata: " + e.message);
+
   }
+
 }
 
-/* ----------------------------- */
-/* Kamera barkod okuma           */
-/* ----------------------------- */
+/* -------------------------------- */
+/* Kamera barkod okuma */
+/* -------------------------------- */
 
 async function startCameraScan() {
-  setBackendResult("Kamera başlatılıyor...");
 
   try {
+
     html5QrCode = new Html5Qrcode("reader");
 
     await html5QrCode.start(
       { facingMode: "environment" },
       { fps: 10, qrbox: 220 },
       async (decodedText) => {
+
         barcodeInputEl.value = decodedText;
+
         await stopCameraScan();
+
         scanProduct();
+
       }
     );
 
     cameraRunning = true;
+
   } catch (e) {
+
     setBackendResult("Kamera açılamadı: " + e.message);
+
   }
+
 }
 
 async function stopCameraScan() {
+
   if (!cameraRunning || !html5QrCode) return;
 
   try {
+
     await html5QrCode.stop();
     await html5QrCode.clear();
+
   } catch {}
 
   cameraRunning = false;
   readerEl.innerHTML = "";
+
 }
 
-/* ----------------------------- */
-/* Fotoğraf seçme                */
-/* ----------------------------- */
+/* -------------------------------- */
+/* Fotoğraf seçme */
+/* -------------------------------- */
 
 fileInput.addEventListener("change", () => {
+
   const f = fileInput.files?.[0];
   selectedFile = f;
 
@@ -172,141 +237,199 @@ fileInput.addEventListener("change", () => {
   }
 
   const url = URL.createObjectURL(f);
+
   previewImg.src = url;
   previewImg.style.display = "block";
+
 });
 
-/* ----------------------------- */
-/* Görsel hazırlama              */
-/* ----------------------------- */
+/* -------------------------------- */
+/* Görsel hazırlama */
+/* -------------------------------- */
 
 async function loadImageFromFile(file) {
+
   const imgUrl = URL.createObjectURL(file);
 
   try {
+
     const img = await new Promise((resolve, reject) => {
+
       const im = new Image();
+
       im.onload = () => resolve(im);
       im.onerror = reject;
+
       im.src = imgUrl;
+
     });
 
     return img;
+
   } finally {
+
     URL.revokeObjectURL(imgUrl);
+
   }
+
 }
 
 async function prepareImageBlob(file, maxDim = 1280) {
+
   const img = await loadImageFromFile(file);
 
   const w = img.naturalWidth;
   const h = img.naturalHeight;
 
   const scale = Math.min(1, maxDim / Math.max(w, h));
+
   const nw = Math.round(w * scale);
   const nh = Math.round(h * scale);
 
   const canvas = document.createElement("canvas");
+
   canvas.width = nw;
   canvas.height = nh;
 
   const ctx = canvas.getContext("2d");
+
   ctx.drawImage(img, 0, 0, nw, nh);
 
-  const blob = await new Promise((resolve) => {
-    canvas.toBlob((b) => resolve(b), "image/jpeg", 0.9);
+  const blob = await new Promise(resolve => {
+    canvas.toBlob(b => resolve(b), "image/jpeg", 0.9);
   });
 
   return blob;
+
 }
 
 async function blobToBase64(blob) {
+
   const dataUrl = await new Promise((resolve, reject) => {
+
     const reader = new FileReader();
+
     reader.onload = () => resolve(reader.result);
     reader.onerror = reject;
+
     reader.readAsDataURL(blob);
+
   });
 
   const s = String(dataUrl);
+
   return s.split(",")[1];
+
 }
 
-/* ----------------------------- */
-/* AI foto analiz                */
-/* ----------------------------- */
+/* -------------------------------- */
+/* AI Foto analiz */
+/* -------------------------------- */
 
 async function analyzeSelectedImage() {
+
   if (!selectedFile) {
+
     setBackendResult("Önce fotoğraf seç.");
     return;
+
   }
 
   setBackendResult("Fotoğraf hazırlanıyor...");
 
   try {
+
     const preparedBlob = await prepareImageBlob(selectedFile);
+
     const base64 = await blobToBase64(preparedBlob);
 
     const r = await fetch(`${getBaseUrl()}/analyze-image`, {
+
       method: "POST",
+
       headers: { "Content-Type": "application/json" },
+
       body: JSON.stringify({
         imageBase64: base64,
         mimeType: "image/jpeg"
       })
+
     });
 
     const data = await r.json();
 
     setBackendResult(data);
+
     renderUserResult(data);
 
     const extracted = data?.extracted;
+
     if (extracted) {
+
       ocrTextEl.value = JSON.stringify(extracted, null, 2);
+
     }
+
   } catch (e) {
+
     setBackendResult("Backend hata: " + e.message);
+
   }
+
 }
 
-/* ----------------------------- */
-/* OCR test                      */
-/* ----------------------------- */
+/* -------------------------------- */
+/* OCR test */
+/* -------------------------------- */
 
 async function runOcrOnImage() {
+
   if (!window.Tesseract) {
+
     setBackendResult("Tesseract yüklenmedi");
+
     return;
+
   }
 
   if (!selectedFile) {
+
     setBackendResult("Önce fotoğraf seç");
+
     return;
+
   }
 
   setBackendResult("OCR çalışıyor...");
 
   try {
+
     const blob = await prepareImageBlob(selectedFile);
+
     const { data } = await Tesseract.recognize(blob, "eng+tur");
+
     const text = data?.text || "";
 
     ocrTextEl.value = text;
+
     setBackendResult("OCR tamamlandı");
+
   } catch (e) {
+
     setBackendResult("OCR hata: " + e.message);
+
   }
+
 }
 
-/* ----------------------------- */
-/* Event binding                 */
-/* ----------------------------- */
+/* -------------------------------- */
+/* Event binding */
+/* -------------------------------- */
 
 scanProductBtn.addEventListener("click", scanProduct);
 startCameraBtn.addEventListener("click", startCameraScan);
 stopCameraBtn.addEventListener("click", stopCameraScan);
+
 sendToBackendBtn.addEventListener("click", analyzeSelectedImage);
+
 runOcrBtn.addEventListener("click", runOcrOnImage);
