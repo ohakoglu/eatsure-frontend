@@ -4,102 +4,176 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#ffffff" />
+
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="styles.css" />
+
   <title>EatSure</title>
 </head>
+
 <body>
-  <main class="wrap">
-    <section class="hero">
-      <h1>EatSure</h1>
-      <p class="muted">
-        Barkod ile veya etiket fotoğrafı ile ürün kontrolü
-      </p>
-    </section>
+
+<main class="wrap">
+
+  <section class="hero">
+    <h1>EatSure</h1>
+    <p class="muted">
+      Barkod veya etiket fotoğrafı ile ürün kontrolü
+    </p>
+  </section>
+
+
+  <!-- BARKOD BÖLÜMÜ -->
+
+  <section class="card">
+
+    <h2>Barkod ile kontrol et</h2>
+
+    <p class="muted small">
+      Önce barkodu gir veya kamerayla okut.
+    </p>
+
+    <label class="label">Barkod</label>
+
+    <input
+      id="barcodeInput"
+      class="input"
+      type="text"
+      inputmode="numeric"
+      autocomplete="off"
+      placeholder="Örn: 8006980240651"
+    />
+
+    <div class="row wrap-row">
+
+      <button id="scanProductBtn" class="btn btn-primary">
+        Barkodu Sorgula
+      </button>
+
+      <button id="startCameraBtn" class="btn btn-secondary">
+        Kamera ile Tara
+      </button>
+
+      <button id="stopCameraBtn" class="btn btn-secondary">
+        Kamerayı Kapat
+      </button>
+
+    </div>
+
+    <div id="reader" class="reader-box"></div>
+
+  </section>
+
+
+
+  <!-- FOTOĞRAF BÖLÜMÜ (BAŞLANGIÇTA GİZLİ) -->
+
+  <section class="card hidden" id="photoSection">
+
+    <h2>Etiket fotoğrafı</h2>
+
+    <p class="muted small">
+      Daha iyi değerlendirme yapabilmemiz için etiket fotoğrafı yükleyebilirsin.
+    </p>
+
+    <label class="label">Etiket fotoğrafı</label>
+
+    <input
+      id="fileInput"
+      type="file"
+      accept="image/*"
+      class="file"
+    />
+
+    <div class="row wrap-row">
+
+      <button id="runOcr" class="btn btn-secondary">
+        OCR (test)
+      </button>
+
+      <button id="sendToBackend" class="btn btn-primary">
+        Fotoğrafı Analiz Et
+      </button>
+
+    </div>
+
+    <div class="preview">
+      <img id="previewImg" />
+    </div>
+
+  </section>
+
+
+
+  <!-- KULLANICI SONUCU -->
+
+  <section class="card">
+
+    <h2>Sonuç</h2>
+
+    <div id="userResult" class="user-result empty-state">
+      Henüz sonuç yok.
+    </div>
+
+  </section>
+
+
+
+  <!-- DEBUG AÇ / KAPA -->
+
+  <section class="card">
+
+    <button id="toggleDebugBtn" class="btn btn-secondary">
+      Debug Bilgilerini Göster
+    </button>
+
+  </section>
+
+
+
+  <!-- DEBUG PANEL -->
+
+  <section id="debugPanel" class="hidden">
 
     <section class="card">
-      <h2>Barkod ile kontrol et</h2>
-      <p class="muted small">
-        Barkodu yaz, kamerayla okut veya kayıtlı ürünü doğrudan sorgula.
-      </p>
 
-      <label class="label" for="barcodeInput">Barkod</label>
-      <input
-        id="barcodeInput"
-        class="input"
-        type="text"
-        inputmode="numeric"
-        autocomplete="off"
-        placeholder="Örn: 8006980240651"
-      />
+      <h2>OCR / AI Extraction</h2>
 
-      <div class="row wrap-row">
-        <button id="scanProductBtn" class="btn btn-primary">Barkodu Sorgula</button>
-        <button id="startCameraBtn" class="btn btn-secondary">Kamera ile Tara</button>
-        <button id="stopCameraBtn" class="btn btn-secondary">Kamerayı Kapat</button>
-      </div>
-
-      <div id="reader" class="reader-box"></div>
-    </section>
-
-    <section class="card">
-      <h2>Etiket fotoğrafı ile kontrol et</h2>
-      <p class="muted small">
-        Fotoğraf seçip doğrudan AI ile analiz edebilirsin. OCR butonu şimdilik debug amaçlı duruyor.
-      </p>
-
-      <label class="label" for="fileInput">Etiket fotoğrafı</label>
-      <input
-        id="fileInput"
-        type="file"
-        accept="image/*"
-        class="file"
-      />
-
-      <div class="row wrap-row">
-        <button id="runOcr" class="btn btn-secondary">OCR Başlat</button>
-        <button id="sendToBackend" class="btn btn-primary">Fotoğrafı Analiz Et</button>
-      </div>
-
-      <div class="preview">
-        <img id="previewImg" alt="" />
-      </div>
-    </section>
-
-    <section class="card" id="ocrSettingsMount">
-      <!-- OCR Ayarları kartını app.js otomatik ekliyor -->
-    </section>
-
-    <section class="card">
-      <h2>Kullanıcının Göreceği Sonuç</h2>
-      <div id="userResult" class="user-result empty-state">
-        Henüz sonuç yok.
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>OCR / AI Extraction (Debug)</h2>
       <textarea
         id="ocrText"
         class="textarea"
         rows="10"
-        placeholder="OCR veya AI extraction sonucu burada görünecek..."
+        placeholder="OCR veya AI extraction sonucu..."
       ></textarea>
+
     </section>
+
 
     <section class="card">
-      <h2>Backend Sonucu (Debug)</h2>
-      <pre id="backendResult" class="pre">Henüz sonuç yok.</pre>
+
+      <h2>Backend Sonucu</h2>
+
+      <pre id="backendResult" class="pre">
+Henüz sonuç yok.
+      </pre>
+
     </section>
-  </main>
 
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  </section>
 
-  <script
-    src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"
-    onerror="this.onerror=null;this.src='https://unpkg.com/tesseract.js@5/dist/tesseract.min.js'">
-  </script>
 
-  <script src="app.js"></script>
+</main>
+
+
+
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<script
+src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"
+onerror="this.onerror=null;this.src='https://unpkg.com/tesseract.js@5/dist/tesseract.min.js'">
+</script>
+
+<script src="app.js"></script>
+
 </body>
 </html>
