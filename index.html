@@ -1,170 +1,105 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
-  <title>EatSure – MVP</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>EatSure</title>
 </head>
-<body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;">
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <h1>EatSure</h1>
+      <p class="muted">
+        Barkod ile veya etiket fotoğrafı ile ürün kontrolü
+      </p>
+    </section>
 
-  <h1>EatSure</h1>
+    <section class="card">
+      <h2>Barkod ile kontrol et</h2>
+      <p class="muted small">
+        Barkodu yaz, kamerayla okut veya kayıtlı ürünü doğrudan sorgula.
+      </p>
 
-  <p>Barkod numarasını gir veya kamerayla tara:</p>
+      <label class="label" for="barcodeInput">Barkod</label>
+      <input
+        id="barcodeInput"
+        class="input"
+        type="text"
+        inputmode="numeric"
+        autocomplete="off"
+        placeholder="Örn: 8006980240651"
+      />
 
-  <input
-    type="text"
-    id="barcodeInput"
-    placeholder="Örn: 8008698004845"
-    style="font-size:16px; padding:8px; width:100%; max-width:320px;"
-  />
+      <div class="row wrap-row">
+        <button id="scanProductBtn" class="btn btn-primary">Barkodu Sorgula</button>
+        <button id="startCameraBtn" class="btn btn-secondary">Kamera ile Tara</button>
+        <button id="stopCameraBtn" class="btn btn-secondary">Kamerayı Kapat</button>
+      </div>
 
-  <br><br>
+      <div id="reader" class="reader-box"></div>
+    </section>
 
-  <button onclick="scanProduct()" style="font-size:16px; padding:10px 16px;">
-    Sorgula
-  </button>
+    <section class="card">
+      <h2>Etiket fotoğrafı ile kontrol et</h2>
+      <p class="muted small">
+        Fotoğraf seçip doğrudan AI ile analiz edebilirsin. OCR butonu şimdilik debug amaçlı duruyor.
+      </p>
 
-  <button onclick="startCameraScan()" style="font-size:16px; padding:10px 16px; margin-left:8px;">
-    📷 Kamera ile tara
-  </button>
+      <label class="label" for="fileInput">Etiket fotoğrafı</label>
+      <input
+        id="fileInput"
+        type="file"
+        accept="image/*"
+        class="file"
+      />
 
-  <div id="reader" style="width:100%; max-width:320px; margin-top:16px;"></div>
+      <div class="row wrap-row">
+        <button id="runOcr" class="btn btn-secondary">OCR Başlat</button>
+        <button id="sendToBackend" class="btn btn-primary">Fotoğrafı Analiz Et</button>
+      </div>
 
-  <div id="productInfo" style="margin-top:20px; font-weight:600;"></div>
-  <div id="result" style="margin-top:10px; padding:14px; border-radius:8px;"></div>
-  <div id="scopeNote" style="margin-top:8px; font-size:14px; color:#555;"></div>
-  <div id="evaluatedAtNote" style="margin-top:8px; font-size:13px; color:#777;"></div>
-  <div id="actions" style="margin-top:16px;"></div>
+      <div class="preview">
+        <img id="previewImg" alt="" />
+      </div>
+    </section>
 
-  <script>
-    let html5QrCode;
+    <section class="card" id="ocrSettingsMount">
+      <!-- OCR Ayarları kartını app.js otomatik ekliyor -->
+    </section>
 
-    const LEVEL_UI = {
-      certified: {
-        title: "✅ Çölyak için uygundur",
-        color: "#2ecc71",
-        scope: "Değerlendirme geçerli glutensiz sertifikalara dayanmaktadır."
-      },
+    <section class="card">
+      <h2>Kullanıcının Göreceği Sonuç</h2>
+      <div id="userResult" class="user-result empty-state">
+        Henüz sonuç yok.
+      </div>
+    </section>
 
-      declared_gf_with_ingredients: {
-        title: "🟢 Üretici beyanına göre glutensiz",
-        color: "#7bed9f",
-        scope: "Değerlendirme üreticinin glutensiz beyanına dayanmaktadır."
-      },
+    <section class="card">
+      <h2>OCR / AI Extraction (Debug)</h2>
+      <textarea
+        id="ocrText"
+        class="textarea"
+        rows="10"
+        placeholder="OCR veya AI extraction sonucu burada görünecek..."
+      ></textarea>
+    </section>
 
-      // 🔧 DEĞİŞİKLİK #1: daha temkinli sarı
-      declared_gf_no_ingredients: {
-        title: "🟡 Üretici beyanına göre glutensiz",
-        color: "#fde68a",
-        scope: "Bilgi yalnızca üretici beyanına dayanmaktadır."
-      },
+    <section class="card">
+      <h2>Backend Sonucu (Debug)</h2>
+      <pre id="backendResult" class="pre">Henüz sonuç yok.</pre>
+    </section>
+  </main>
 
-      ingredients_safe_no_claim: {
-        title: "🟨 İçerik uygun, garanti yok",
-        color: "#f9e79f",
-        scope: "İçerik analizinde gluten kaynağı tespit edilmemiştir ancak üretici beyanı veya sertifika yoktur."
-      },
+  <script src="https://unpkg.com/html5-qrcode"></script>
 
-      declaration_conflict: {
-        title: "🟠 Çelişkili bilgi",
-        color: "#f39c12",
-        scope: "Üretici beyanı ile içerik bilgisi çelişmektedir."
-      },
-
-      gluten_present: {
-        title: "🔴 Çölyak için uygun değildir",
-        color: "#e74c3c",
-        scope: "Ürün içeriğinde gluten veya gluten kaynağı bulunmaktadır."
-      },
-
-      insufficient_data: {
-        title: "⚪ Bilgi yetersiz",
-        color: "#ecf0f1",
-        scope: "Ürün hakkında karar vermek için yeterli veri bulunmamaktadır."
-      }
-    };
-
-    function formatDate(iso) {
-      const d = new Date(iso);
-      return `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`;
-    }
-
-    function startCameraScan() {
-      reader.innerHTML = "";
-      html5QrCode = new Html5Qrcode("reader");
-      html5QrCode.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: 250 },
-        text => {
-          barcodeInput.value = text;
-          html5QrCode.stop();
-          scanProduct();
-        }
-      );
-    }
-
-    // 🔧 DEĞİŞİKLİK #2: sayfa yenilemeden reset
-    function resetForNextScan() {
-      productInfo.innerHTML = "";
-      result.innerHTML = "";
-      scopeNote.innerHTML = "";
-      evaluatedAtNote.innerHTML = "";
-      actions.innerHTML = "";
-      barcodeInput.value = "";
-      reader.innerHTML = "";
-      barcodeInput.focus();
-    }
-
-    async function scanProduct() {
-      const barcode = barcodeInput.value.trim();
-      productInfo.innerHTML = "";
-      scopeNote.innerHTML = "";
-      evaluatedAtNote.innerHTML = "";
-      actions.innerHTML = "";
-
-      if (!barcode) {
-        result.innerHTML = "Barkod giriniz.";
-        return;
-      }
-
-      result.innerHTML = "🔎 Ürün aranıyor…";
-
-      let data;
-      try {
-        const res = await fetch("https://eatsure-backend-4dkh.onrender.com/scan/" + barcode);
-        data = await res.json();
-      } catch {
-        result.innerHTML = "Sunucuya ulaşılamıyor.";
-        return;
-      }
-
-      if (data.brand || data.name) {
-        productInfo.innerHTML = `${data.brand || ""} ${data.name || ""}`;
-      }
-
-      const level = data.decision?.level || "insufficient_data";
-      const ui = LEVEL_UI[level] || LEVEL_UI.insufficient_data;
-
-      let description = data.decision?.reason || "";
-
-      // 🔒 GF beyanı varsa içerikten bahsetme
-      if (level === "declared_gf_with_ingredients" || level === "declared_gf_no_ingredients") {
-        description = "Üretici ürünü glutensiz olarak beyan etmektedir.";
-      }
-
-      result.style.background = ui.color;
-      result.innerHTML = `<h2>${ui.title}</h2><p>${description}</p>`;
-      scopeNote.innerHTML = ui.scope;
-
-      if (data.meta?.evaluatedAt) {
-        evaluatedAtNote.innerHTML =
-          `Bu değerlendirme, <strong>${formatDate(data.meta.evaluatedAt)}</strong> tarihinde mevcut olan verilere göre oluşturulmuştur.`;
-      }
-
-      actions.innerHTML = `<button onclick="resetForNextScan()">Yeni ürün tara</button>`;
-    }
+  <script
+    src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"
+    onerror="this.onerror=null;this.src='https://unpkg.com/tesseract.js@5/dist/tesseract.min.js'">
   </script>
 
+  <script src="app.js"></script>
 </body>
 </html>
