@@ -154,7 +154,14 @@ h2 {
   font-size: 12px;
 }
 
+/* 🔒 GİZLİ ALANLAR */
+
+.hidden {
+  display: none !important;
+}
+
 @media (max-width: 640px) {
+
   .wrap {
     padding: 12px;
   }
@@ -178,4 +185,5 @@ h2 {
   .reader-box {
     max-width: 100%;
   }
+
 }
