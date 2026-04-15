@@ -14,6 +14,7 @@ const previewImg = document.getElementById("previewImg");
 
 const runOcrBtn = document.getElementById("runOcr");
 const sendToBackendBtn = document.getElementById("sendToBackend");
+const analyzeTextBtn = document.getElementById("analyzeTextBtn");
 
 const ocrTextEl = document.getElementById("ocrText");
 const backendResultEl = document.getElementById("backendResult");
@@ -423,6 +424,46 @@ async function runOcrOnImage() {
 }
 
 /* -------------------------------- */
+/* Metin analizi (debug/test) */
+/* -------------------------------- */
+
+async function analyzeTextFromDebug() {
+
+  const labelText = (ocrTextEl.value || "").trim();
+  const barcode = (barcodeInputEl.value || "").trim();
+
+  if (!labelText || labelText.length < 3) {
+    setBackendResult("Analiz için metin gir.");
+    return;
+  }
+
+  setBackendResult("Metin analiz ediliyor...");
+
+  try {
+
+    const r = await fetch(`${getBaseUrl()}/analyze-label`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        labelText,
+        barcode: barcode || undefined
+      })
+    });
+
+    const data = await r.json();
+
+    setBackendResult(data);
+    renderUserResult(data);
+
+  } catch (e) {
+
+    setBackendResult("Backend hata: " + e.message);
+
+  }
+
+}
+
+/* -------------------------------- */
 /* Event binding */
 /* -------------------------------- */
 
@@ -431,5 +472,5 @@ startCameraBtn.addEventListener("click", startCameraScan);
 stopCameraBtn.addEventListener("click", stopCameraScan);
 
 sendToBackendBtn.addEventListener("click", analyzeSelectedImage);
-
 runOcrBtn.addEventListener("click", runOcrOnImage);
+analyzeTextBtn.addEventListener("click", analyzeTextFromDebug);
