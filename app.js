@@ -8,6 +8,9 @@ const stopCameraBtn = document.getElementById("stopCameraBtn");
 const readerEl = document.getElementById("reader");
 
 const photoSection = document.getElementById("photoSection");
+const photoPromptSection = document.getElementById("photoPromptSection");
+const photoPromptText = document.getElementById("photoPromptText");
+const openPhotoSectionBtn = document.getElementById("openPhotoSectionBtn");
 
 const fileInput = document.getElementById("fileInput");
 const previewImg = document.getElementById("previewImg");
@@ -47,6 +50,29 @@ function showPhotoSection() {
   photoSection.classList.remove("hidden");
 }
 
+function hidePhotoSection() {
+  photoSection.classList.add("hidden");
+}
+
+function showPhotoPrompt(text) {
+  photoPromptText.textContent = text;
+  photoPromptSection.classList.remove("hidden");
+}
+
+function hidePhotoPrompt() {
+  photoPromptText.textContent = "";
+  photoPromptSection.classList.add("hidden");
+}
+
+function scrollToPhotoSection() {
+  photoSection.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function openPhotoFlow() {
+  showPhotoSection();
+  scrollToPhotoSection();
+}
+
 /* -------------------------------- */
 /* Debug panel */
 /* -------------------------------- */
@@ -64,6 +90,8 @@ toggleDebugBtn.addEventListener("click", () => {
   }
 
 });
+
+openPhotoSectionBtn.addEventListener("click", openPhotoFlow);
 
 /* -------------------------------- */
 /* Kullanıcı sonucu */
@@ -117,6 +145,7 @@ function renderUserResult(data) {
   const brand = data?.brand || "";
   const name = data?.name || "";
 
+  userResultEl.classList.remove("empty-state");
   userResultEl.style.background = ui.color;
 
   userResultEl.innerHTML = `
@@ -125,6 +154,20 @@ function renderUserResult(data) {
     <p>${reason}</p>
   `;
 
+}
+
+function updatePhotoPrompt(data) {
+
+  const level = data?.decision?.level || "insufficient_data";
+
+  if (level === "insufficient_data") {
+    hidePhotoPrompt();
+    showPhotoSection();
+    return;
+  }
+
+  showPhotoPrompt("İstersen daha ayrıntılı kontrol için etiket fotoğrafı da ekleyebilirsin.");
+  hidePhotoSection();
 }
 
 /* -------------------------------- */
@@ -140,6 +183,8 @@ async function scanProduct() {
     return;
   }
 
+  hidePhotoPrompt();
+  hidePhotoSection();
   setBackendResult("Ürün aranıyor...");
 
   try {
@@ -149,20 +194,7 @@ async function scanProduct() {
 
     setBackendResult(data);
     renderUserResult(data);
-
-    const level = data?.decision?.level;
-
-    if (level === "insufficient_data") {
-
-      showPhotoSection();
-
-      userResultEl.innerHTML += `
-        <p class="muted small">
-        Daha iyi değerlendirme yapabilmemiz için etiket fotoğrafı yükleyebilirsiniz.
-        </p>
-      `;
-
-    }
+    updatePhotoPrompt(data);
 
   } catch (e) {
 
@@ -352,7 +384,8 @@ async function analyzeSelectedImage() {
 
       body: JSON.stringify({
         imageBase64: base64,
-        mimeType: "image/jpeg"
+        mimeType: "image/jpeg",
+        barcode: (barcodeInputEl.value || "").trim() || undefined
       })
 
     });
@@ -362,6 +395,8 @@ async function analyzeSelectedImage() {
     setBackendResult(data);
 
     renderUserResult(data);
+    showPhotoSection();
+    hidePhotoPrompt();
 
     const extracted = data?.extracted;
 
