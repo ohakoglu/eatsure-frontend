@@ -93,6 +93,13 @@ h2 {
   color: #111827;
 }
 
+.btn-small {
+  width: auto;
+  padding: 8px 12px;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
 .preview {
   margin-top: 12px;
   border: 1px dashed #d1d5db;
@@ -138,6 +145,16 @@ h2 {
   min-height: 120px;
 }
 
+.photo-prompt {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.photo-prompt p {
+  margin: 0 0 8px 0;
+}
+
 .empty-state {
   display: flex;
   align-items: center;
@@ -179,6 +196,10 @@ h2 {
   }
 
   .btn {
+    width: 100%;
+  }
+
+  .btn-small {
     width: 100%;
   }
 
