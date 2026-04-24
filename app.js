@@ -50,10 +50,6 @@ function showPhotoSection() {
   photoSection.classList.remove("hidden");
 }
 
-function hidePhotoSection() {
-  photoSection.classList.add("hidden");
-}
-
 function showPhotoPrompt(text) {
   photoPromptText.textContent = text;
   photoPromptSection.classList.remove("hidden");
@@ -161,13 +157,12 @@ function updatePhotoPrompt(data) {
   const level = data?.decision?.level || "insufficient_data";
 
   if (level === "insufficient_data") {
-    hidePhotoPrompt();
     showPhotoSection();
+    showPhotoPrompt("Bilgi yetersiz. Daha iyi değerlendirme için aşağıdaki etiket fotoğrafı alanını kullanabilirsin.");
     return;
   }
 
-  showPhotoPrompt("İstersen daha ayrıntılı kontrol için etiket fotoğrafı da ekleyebilirsin.");
-  hidePhotoSection();
+  showPhotoPrompt("İstersen daha ayrıntılı kontrol için aşağıdaki etiket fotoğrafı alanını da kullanabilirsin.");
 }
 
 /* -------------------------------- */
@@ -184,7 +179,7 @@ async function scanProduct() {
   }
 
   hidePhotoPrompt();
-  hidePhotoSection();
+  showPhotoSection();
   setBackendResult("Ürün aranıyor...");
 
   try {
