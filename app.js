@@ -69,6 +69,33 @@ function openPhotoFlow() {
   scrollToPhotoSection();
 }
 
+function getBarcodeScannerConfig() {
+  const config = {
+    fps: 10,
+    qrbox: function(viewfinderWidth, viewfinderHeight) {
+      const width = Math.floor(viewfinderWidth * 0.9);
+      const maxHeight = Math.floor(viewfinderHeight * 0.35);
+      const height = Math.min(Math.floor(width * 0.35), maxHeight);
+
+      return {
+        width,
+        height: Math.max(height, 120)
+      };
+    }
+  };
+
+  if (window.Html5QrcodeSupportedFormats) {
+    config.formatsToSupport = [
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E
+    ];
+  }
+
+  return config;
+}
+
 /* -------------------------------- */
 /* Debug panel */
 /* -------------------------------- */
@@ -205,29 +232,47 @@ async function scanProduct() {
 
 async function startCameraScan() {
 
+  if (cameraRunning) {
+    setBackendResult("Kamera zaten açık. Barkodu dikdörtgen alanın içine yaklaştır.");
+    return;
+  }
+
   try {
 
     html5QrCode = new Html5Qrcode("reader");
 
     await html5QrCode.start(
       { facingMode: "environment" },
-      { fps: 10, qrbox: 220 },
+      getBarcodeScannerConfig(),
       async (decodedText) => {
 
-        barcodeInputEl.value = decodedText;
+        const cleanedBarcode = String(decodedText || "").replace(/\D/g, "");
+
+        if (!cleanedBarcode) {
+          console.log("Barkod okundu ama sayısal değil:", decodedText);
+          return;
+        }
+
+        barcodeInputEl.value = cleanedBarcode;
 
         await stopCameraScan();
 
         scanProduct();
 
+      },
+      (errorMessage) => {
+        console.log("Barkod tarama denemesi:", errorMessage);
       }
     );
 
     cameraRunning = true;
+    setBackendResult("Kamera açık. Barkodu dikdörtgen alanın içine yaklaştır.");
 
   } catch (e) {
 
     setBackendResult("Kamera açılamadı: " + e.message);
+    cameraRunning = false;
+    html5QrCode = null;
 
   }
 
@@ -245,6 +290,7 @@ async function stopCameraScan() {
   } catch {}
 
   cameraRunning = false;
+  html5QrCode = null;
   readerEl.innerHTML = "";
 
 }
