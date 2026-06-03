@@ -29,6 +29,8 @@ const debugPanel = document.getElementById("debugPanel");
 let selectedFile = null;
 let barcodeCodeReader = null;
 let barcodeScanControls = null;
+let barcodeDetector = null;
+let barcodeDetectorLoopId = null;
 let cameraRunning = false;
 let barcodeDetected = false;
 
@@ -166,6 +168,90 @@ function shouldIgnoreBarcodeError(error) {
     name === "ChecksumException" ||
     name === "FormatException"
   );
+}
+
+async function handleDetectedBarcode(rawText) {
+  if (barcodeDetected) return false;
+
+  const cleanedBarcode = normalizeBarcodeText(rawText);
+
+  if (!isLikelyBarcode(cleanedBarcode)) {
+    console.log("Barkod benzeri olmayan okuma:", rawText);
+    return false;
+  }
+
+  barcodeDetected = true;
+  console.log("BARKOD OKUNDU:", cleanedBarcode);
+
+  barcodeInputEl.value = cleanedBarcode;
+
+  await stopCameraScan();
+  scanProduct();
+
+  return true;
+}
+
+function createNativeBarcodeDetector() {
+  if (!("BarcodeDetector" in window)) {
+    return null;
+  }
+
+  try {
+    return new BarcodeDetector({
+      formats: [
+        "ean_13",
+        "ean_8",
+        "upc_a",
+        "upc_e",
+        "code_128",
+        "code_39",
+        "itf"
+      ]
+    });
+  } catch (err) {
+    console.log("Native BarcodeDetector baslatilamadi:", err?.message || err);
+    return null;
+  }
+}
+
+function startNativeBarcodeDetection(videoEl) {
+  barcodeDetector = createNativeBarcodeDetector();
+
+  if (!barcodeDetector) {
+    return;
+  }
+
+  const detect = async () => {
+    if (!cameraRunning || barcodeDetected || !barcodeDetector) {
+      return;
+    }
+
+    try {
+      if (videoEl.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        const barcodes = await barcodeDetector.detect(videoEl);
+        const rawValue = barcodes?.[0]?.rawValue;
+
+        if (rawValue && await handleDetectedBarcode(rawValue)) {
+          return;
+        }
+      }
+    } catch (err) {
+      console.log("Native barkod okuma denemesi:", err?.message || err);
+    }
+
+    barcodeDetectorLoopId = window.requestAnimationFrame(detect);
+  };
+
+  barcodeDetectorLoopId = window.requestAnimationFrame(detect);
+}
+
+function stopNativeBarcodeDetection() {
+  if (barcodeDetectorLoopId) {
+    window.cancelAnimationFrame(barcodeDetectorLoopId);
+  }
+
+  barcodeDetectorLoopId = null;
+  barcodeDetector = null;
 }
 
 function stopVideoTracks() {
@@ -377,7 +463,7 @@ async function startCameraScan() {
     barcodeCodeReader = new ZXing.BrowserMultiFormatReader(hints, 200);
 
     const videoEl = createBarcodeVideoElement();
-    const preferredDeviceId = await getPreferredBackCameraDeviceId(barcodeCodeReader);
+    startNativeBarcodeDetection(videoEl);
 
     const callback = async (result, error) => {
 
@@ -389,23 +475,7 @@ async function startCameraScan() {
             ? result.getText()
             : result.text || String(result || "");
 
-        const cleanedBarcode = normalizeBarcodeText(rawText);
-
-        if (!isLikelyBarcode(cleanedBarcode)) {
-          console.log("Barkod benzeri olmayan okuma:", rawText);
-          return;
-        }
-
-        barcodeDetected = true;
-
-        console.log("BARKOD OKUNDU:", cleanedBarcode);
-
-        barcodeInputEl.value = cleanedBarcode;
-
-        await stopCameraScan();
-
-        scanProduct();
-
+        await handleDetectedBarcode(rawText);
         return;
       }
 
@@ -416,7 +486,7 @@ async function startCameraScan() {
     };
 
     barcodeScanControls = await barcodeCodeReader.decodeFromVideoDevice(
-      preferredDeviceId || null,
+      null,
       videoEl,
       callback
     );
@@ -433,6 +503,7 @@ async function startCameraScan() {
     barcodeDetected = false;
     barcodeCodeReader = null;
     barcodeScanControls = null;
+    stopNativeBarcodeDetection();
     stopVideoTracks();
     readerEl.replaceChildren();
 
@@ -462,6 +533,7 @@ async function stopCameraScan() {
 
   }
 
+  stopNativeBarcodeDetection();
   stopVideoTracks();
 
   cameraRunning = false;
