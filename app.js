@@ -86,7 +86,7 @@ function isLikelyBarcode(value) {
 }
 
 function createBarcodeVideoElement() {
-  readerEl.innerHTML = "";
+  readerEl.replaceChildren();
 
   const videoEl = document.createElement("video");
 
@@ -115,7 +115,10 @@ function getBarcodeHints() {
     ZXing.BarcodeFormat.EAN_13,
     ZXing.BarcodeFormat.EAN_8,
     ZXing.BarcodeFormat.UPC_A,
-    ZXing.BarcodeFormat.UPC_E
+    ZXing.BarcodeFormat.UPC_E,
+    ZXing.BarcodeFormat.CODE_128,
+    ZXing.BarcodeFormat.CODE_39,
+    ZXing.BarcodeFormat.ITF
   ]);
 
   hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
@@ -150,6 +153,19 @@ async function getPreferredBackCameraDeviceId(codeReader) {
   } catch {
     return null;
   }
+}
+
+function getBarcodeErrorName(error) {
+  return error?.name || error?.constructor?.name || "";
+}
+
+function shouldIgnoreBarcodeError(error) {
+  const name = getBarcodeErrorName(error);
+  return (
+    name === "NotFoundException" ||
+    name === "ChecksumException" ||
+    name === "FormatException"
+  );
 }
 
 function stopVideoTracks() {
@@ -358,9 +374,10 @@ async function startCameraScan() {
     setBackendResult("Kamera açılıyor...");
 
     const hints = getBarcodeHints();
-    barcodeCodeReader = new ZXing.BrowserMultiFormatReader(hints, 300);
+    barcodeCodeReader = new ZXing.BrowserMultiFormatReader(hints, 200);
 
     const videoEl = createBarcodeVideoElement();
+    const preferredDeviceId = await getPreferredBackCameraDeviceId(barcodeCodeReader);
 
     const callback = async (result, error) => {
 
@@ -392,33 +409,17 @@ async function startCameraScan() {
         return;
       }
 
-      if (error && error.name !== "NotFoundException") {
+      if (error && !shouldIgnoreBarcodeError(error)) {
         console.log("Barkod okuma denemesi:", error?.message || error);
       }
 
     };
 
-    if (typeof barcodeCodeReader.decodeFromConstraints === "function") {
-      await barcodeCodeReader.decodeFromConstraints(
-        {
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        },
-        videoEl,
-        callback
-      );
-    } else {
-      const preferredDeviceId = await getPreferredBackCameraDeviceId(barcodeCodeReader);
-
-      barcodeScanControls = await barcodeCodeReader.decodeFromVideoDevice(
-        preferredDeviceId,
-        videoEl,
-        callback
-      );
-    }
+    barcodeScanControls = await barcodeCodeReader.decodeFromVideoDevice(
+      preferredDeviceId || null,
+      videoEl,
+      callback
+    );
 
     setBackendResult("Kamera açık. Barkodu net, iyi ışıkta ve kadrajı dolduracak şekilde göster.");
 
@@ -433,7 +434,7 @@ async function startCameraScan() {
     barcodeCodeReader = null;
     barcodeScanControls = null;
     stopVideoTracks();
-    readerEl.innerHTML = "";
+    readerEl.replaceChildren();
 
   }
 
@@ -467,7 +468,7 @@ async function stopCameraScan() {
   barcodeDetected = false;
   barcodeCodeReader = null;
   barcodeScanControls = null;
-  readerEl.innerHTML = "";
+  readerEl.replaceChildren();
 
 }
 
