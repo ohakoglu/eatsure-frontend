@@ -1,4 +1,4 @@
-const BACKEND_BASE = "https://eatsure-backend-4dkh.onrender.com";
+const DEFAULT_BACKEND_BASE = "https://eatsure-backend-4dkh.onrender.com";
 
 const barcodeInputEl = document.getElementById("barcodeInput");
 const scanProductBtn = document.getElementById("scanProductBtn");
@@ -37,7 +37,12 @@ let barcodeDetected = false;
 /* -------------------------------- */
 
 function getBaseUrl() {
-  return BACKEND_BASE.replace(/\/+$/, "");
+  const configuredBase =
+    window.EATSURE_CONFIG?.backendBase ||
+    window.localStorage?.getItem("EATSURE_BACKEND_BASE") ||
+    DEFAULT_BACKEND_BASE;
+
+  return String(configuredBase).replace(/\/+$/, "");
 }
 
 function setBackendResult(data) {
@@ -223,6 +228,37 @@ const LEVEL_UI = {
 
 };
 
+Object.assign(LEVEL_UI, {
+  certified: {
+    ...LEVEL_UI.certified,
+    title: "Colyak icin uygundur"
+  },
+  declared_gf_with_ingredients: {
+    ...LEVEL_UI.declared_gf_with_ingredients,
+    title: "Uretici beyanina gore glutensiz"
+  },
+  declared_gf_no_ingredients: {
+    ...LEVEL_UI.declared_gf_no_ingredients,
+    title: "Uretici glutensiz beyani"
+  },
+  gluten_present: {
+    ...LEVEL_UI.gluten_present,
+    title: "Gluten iceriyor"
+  },
+  declaration_conflict: {
+    ...LEVEL_UI.declaration_conflict,
+    title: "Celiskili bilgi"
+  },
+  ingredients_safe_no_claim: {
+    ...LEVEL_UI.ingredients_safe_no_claim,
+    title: "Icerik uygun gorunuyor"
+  },
+  insufficient_data: {
+    ...LEVEL_UI.insufficient_data,
+    title: "Bilgi yetersiz"
+  }
+});
+
 function renderUserResult(data) {
 
   const level = data?.decision?.level || "insufficient_data";
@@ -235,11 +271,20 @@ function renderUserResult(data) {
   userResultEl.classList.remove("empty-state");
   userResultEl.style.background = ui.color;
 
-  userResultEl.innerHTML = `
-    <h3>${ui.title}</h3>
-    <p><strong>${[brand, name].filter(Boolean).join(" / ")}</strong></p>
-    <p>${reason}</p>
-  `;
+  userResultEl.replaceChildren();
+
+  const titleEl = document.createElement("h3");
+  titleEl.textContent = ui.title;
+
+  const productEl = document.createElement("p");
+  const productStrongEl = document.createElement("strong");
+  productStrongEl.textContent = [brand, name].filter(Boolean).join(" / ");
+  productEl.appendChild(productStrongEl);
+
+  const reasonEl = document.createElement("p");
+  reasonEl.textContent = reason;
+
+  userResultEl.append(titleEl, productEl, reasonEl);
 
 }
 
