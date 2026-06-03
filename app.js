@@ -29,8 +29,6 @@ const debugPanel = document.getElementById("debugPanel");
 let selectedFile = null;
 let barcodeCodeReader = null;
 let barcodeScanControls = null;
-let barcodeDetector = null;
-let barcodeDetectorLoopId = null;
 let cameraRunning = false;
 let barcodeDetected = false;
 
@@ -108,53 +106,45 @@ function createBarcodeVideoElement() {
   return videoEl;
 }
 
-function getBarcodeHints() {
-  if (!window.ZXing) return undefined;
-
-  const hints = new Map();
-
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-    ZXing.BarcodeFormat.EAN_13,
-    ZXing.BarcodeFormat.EAN_8,
-    ZXing.BarcodeFormat.UPC_A,
-    ZXing.BarcodeFormat.UPC_E,
-    ZXing.BarcodeFormat.CODE_128,
-    ZXing.BarcodeFormat.CODE_39,
-    ZXing.BarcodeFormat.ITF
-  ]);
-
-  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-
-  return hints;
+function getZxing() {
+  return window.ZXingBrowser || window.ZXing || null;
 }
 
-async function getPreferredBackCameraDeviceId(codeReader) {
-  try {
-    if (!codeReader || typeof codeReader.listVideoInputDevices !== "function") {
-      return null;
-    }
+function getBarcodeFormats(zxing) {
+  const format = zxing?.BarcodeFormat || {};
 
-    const devices = await codeReader.listVideoInputDevices();
+  return [
+    format.EAN_13,
+    format.EAN_8,
+    format.UPC_A,
+    format.UPC_E,
+    format.CODE_128,
+    format.CODE_39,
+    format.ITF
+  ].filter(Boolean);
+}
 
-    if (!Array.isArray(devices) || devices.length === 0) {
-      return null;
-    }
+function createZxingReader(zxing) {
+  const formats = getBarcodeFormats(zxing);
 
-    const backCamera = devices.find(device => {
-      const label = String(device.label || "").toLowerCase();
-
-      return (
-        label.includes("back") ||
-        label.includes("rear") ||
-        label.includes("environment") ||
-        label.includes("arka")
-      );
-    });
-
-    return backCamera?.deviceId || devices[0]?.deviceId || null;
-  } catch {
-    return null;
+  if (zxing?.DecodeHintType) {
+    const hints = new Map();
+    hints.set(zxing.DecodeHintType.POSSIBLE_FORMATS, formats);
+    hints.set(zxing.DecodeHintType.TRY_HARDER, true);
+    return new zxing.BrowserMultiFormatReader(hints, 200);
   }
+
+  const reader = new zxing.BrowserMultiFormatReader();
+
+  if ("possibleFormats" in reader && formats.length > 0) {
+    reader.possibleFormats = formats;
+  }
+
+  if ("timeBetweenDecodingAttempts" in reader) {
+    reader.timeBetweenDecodingAttempts = 150;
+  }
+
+  return reader;
 }
 
 function getBarcodeErrorName(error) {
@@ -189,69 +179,6 @@ async function handleDetectedBarcode(rawText) {
   scanProduct();
 
   return true;
-}
-
-function createNativeBarcodeDetector() {
-  if (!("BarcodeDetector" in window)) {
-    return null;
-  }
-
-  try {
-    return new BarcodeDetector({
-      formats: [
-        "ean_13",
-        "ean_8",
-        "upc_a",
-        "upc_e",
-        "code_128",
-        "code_39",
-        "itf"
-      ]
-    });
-  } catch (err) {
-    console.log("Native BarcodeDetector baslatilamadi:", err?.message || err);
-    return null;
-  }
-}
-
-function startNativeBarcodeDetection(videoEl) {
-  barcodeDetector = createNativeBarcodeDetector();
-
-  if (!barcodeDetector) {
-    return;
-  }
-
-  const detect = async () => {
-    if (!cameraRunning || barcodeDetected || !barcodeDetector) {
-      return;
-    }
-
-    try {
-      if (videoEl.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-        const barcodes = await barcodeDetector.detect(videoEl);
-        const rawValue = barcodes?.[0]?.rawValue;
-
-        if (rawValue && await handleDetectedBarcode(rawValue)) {
-          return;
-        }
-      }
-    } catch (err) {
-      console.log("Native barkod okuma denemesi:", err?.message || err);
-    }
-
-    barcodeDetectorLoopId = window.requestAnimationFrame(detect);
-  };
-
-  barcodeDetectorLoopId = window.requestAnimationFrame(detect);
-}
-
-function stopNativeBarcodeDetection() {
-  if (barcodeDetectorLoopId) {
-    window.cancelAnimationFrame(barcodeDetectorLoopId);
-  }
-
-  barcodeDetectorLoopId = null;
-  barcodeDetector = null;
 }
 
 function stopVideoTracks() {
@@ -448,7 +375,9 @@ async function startCameraScan() {
     return;
   }
 
-  if (!window.ZXing) {
+  const zxing = getZxing();
+
+  if (!zxing?.BrowserMultiFormatReader) {
     setBackendResult("ZXing barkod okuyucu yüklenmedi. İnternet bağlantısını kontrol et.");
     return;
   }
@@ -459,11 +388,9 @@ async function startCameraScan() {
     barcodeDetected = false;
     setBackendResult("Kamera açılıyor...");
 
-    const hints = getBarcodeHints();
-    barcodeCodeReader = new ZXing.BrowserMultiFormatReader(hints, 200);
+    barcodeCodeReader = createZxingReader(zxing);
 
     const videoEl = createBarcodeVideoElement();
-    startNativeBarcodeDetection(videoEl);
 
     const callback = async (result, error) => {
 
@@ -503,7 +430,6 @@ async function startCameraScan() {
     barcodeDetected = false;
     barcodeCodeReader = null;
     barcodeScanControls = null;
-    stopNativeBarcodeDetection();
     stopVideoTracks();
     readerEl.replaceChildren();
 
@@ -533,7 +459,6 @@ async function stopCameraScan() {
 
   }
 
-  stopNativeBarcodeDetection();
   stopVideoTracks();
 
   cameraRunning = false;
