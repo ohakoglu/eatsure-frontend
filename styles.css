@@ -20,16 +20,21 @@ body {
 }
 
 .brand-heading {
-  margin: 0 0 8px 0;
+  margin: 0;
+  display: flex;
+  justify-content: center;
 }
 
 .brand-logo {
   display: block;
-  width: min(280px, 82vw);
+  width: min(300px, 78vw);
   height: auto;
 }
 
-.hero p,
+.hero {
+  padding: 6px 0 4px;
+}
+
 p {
   margin: 0;
 }
@@ -195,7 +200,7 @@ h3 {
   }
 
   .brand-logo {
-    width: min(240px, 86vw);
+    width: min(260px, 84vw);
   }
 
   .btn {
