@@ -8,8 +8,8 @@
   "theme_color": "#10B75A",
   "icons": [
     {
-      "src": "assets/eatsure-brand.png",
-      "sizes": "1536x1024",
+      "src": "assets/eatsure-app-icon.png",
+      "sizes": "1254x1254",
       "type": "image/png"
     }
   ]
