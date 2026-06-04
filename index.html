@@ -24,12 +24,12 @@
   </section>
 
   <section class="card" id="startSection">
-    <h2>Baslayalim</h2>
-    <p class="muted small">Bir yol sec. Gerekirse sonraki adimi EatSure acacak.</p>
+    <h2>Başlayalım</h2>
+    <p class="muted small">Bir yol seç. Gerekirse sonraki adımı EatSure açacak.</p>
 
     <div class="action-list">
       <button id="startCameraBtn" class="btn btn-primary">Barkodu Tara</button>
-      <button id="manualBarcodeBtn" class="btn btn-secondary">Barkodu Kendim Girecegim</button>
+      <button id="manualBarcodeBtn" class="btn btn-secondary">Barkodu Kendim Gireceğim</button>
       <button id="noBarcodeBtn" class="btn btn-secondary">Barkod Yok</button>
     </div>
 
@@ -41,17 +41,17 @@
         type="text"
         inputmode="numeric"
         autocomplete="off"
-        placeholder="Orn: 8006980240651"
+        placeholder="Örn: 8006980240651"
       />
       <button id="scanProductBtn" class="btn btn-primary">Devam Et</button>
     </div>
 
     <div id="reader" class="reader-box"></div>
-    <button id="stopCameraBtn" class="btn btn-secondary hidden">Kamerayi Kapat</button>
+    <button id="stopCameraBtn" class="btn btn-secondary hidden">Kamerayı Kapat</button>
   </section>
 
   <section class="card hidden" id="photoSection">
-    <h2 id="photoStepTitle">Etiket fotografi</h2>
+    <h2 id="photoStepTitle">Etiket fotoğrafı</h2>
     <p id="photoStepText" class="muted small"></p>
 
     <input
@@ -78,21 +78,23 @@
       class="file hidden"
     />
 
-    <button id="choosePhotoBtn" class="btn btn-primary">Fotograf Cek veya Sec</button>
+    <button id="choosePhotoBtn" class="btn btn-primary">Fotoğraf Çek veya Seç</button>
 
     <div id="extraChoicePanel" class="action-list hidden">
-      <button id="addExtraPhotoBtn" class="btn btn-secondary">Evet, ek fotograf var</button>
-      <button id="skipExtraPhotoBtn" class="btn btn-primary">Hayir, sonucu goster</button>
+      <button id="addExtraPhotoBtn" class="btn btn-secondary">Evet, ek fotoğraf var</button>
+      <button id="skipExtraPhotoBtn" class="btn btn-primary">Hayır, sonucu göster</button>
     </div>
 
     <div id="photoProgress" class="photo-progress"></div>
   </section>
 
-  <section class="card">
-    <h2>Sonuc</h2>
-    <div id="userResult" class="user-result empty-state">
-      Henuz sonuc yok.
-    </div>
+  <section class="card hidden" id="statusSection">
+    <div id="userStatus" class="status-message"></div>
+  </section>
+
+  <section class="card hidden" id="resultSection">
+    <h2>Sonuç</h2>
+    <div id="userResult" class="user-result"></div>
   </section>
 
   <section class="debug-shell">
@@ -112,7 +114,7 @@
 
       <section class="card">
         <h2>Backend Sonucu</h2>
-        <pre id="backendResult" class="pre">Henuz sonuc yok.</pre>
+        <pre id="backendResult" class="pre">Henüz sonuç yok.</pre>
       </section>
     </section>
   </section>

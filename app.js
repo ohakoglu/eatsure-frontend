@@ -22,6 +22,9 @@ const addExtraPhotoBtn = document.getElementById("addExtraPhotoBtn");
 const skipExtraPhotoBtn = document.getElementById("skipExtraPhotoBtn");
 const photoProgress = document.getElementById("photoProgress");
 
+const statusSection = document.getElementById("statusSection");
+const userStatusEl = document.getElementById("userStatus");
+const resultSection = document.getElementById("resultSection");
 const userResultEl = document.getElementById("userResult");
 const toggleDebugBtn = document.getElementById("toggleDebugBtn");
 const debugPanel = document.getElementById("debugPanel");
@@ -43,49 +46,49 @@ let photoFiles = {
 
 const PHOTO_STEPS = {
   front: {
-    title: "Once on yuz fotografi",
-    text: "Urunun on yuzunu cek. Bu fotograf urun adi ve marka icin kullanilir.",
+    title: "Ön yüz fotoğrafı",
+    text: "Ürünün ön yüzünü çek. Bu fotoğraf ürün adı ve marka için kullanılır.",
     input: frontFileInput
   },
   ingredients: {
-    title: "Simdi icindekiler fotografi",
-    text: "Icindekiler bolumunu net ve yakin cek. Karar icin ana kaynak budur.",
+    title: "Şimdi içindekiler fotoğrafı",
+    text: "İçindekiler bölümünü net ve yakın çek. Karar için ana kaynak budur.",
     input: ingredientsFileInput
   },
   extra: {
-    title: "Ek bilgi fotografi",
-    text: "Alerjen, uyari, sertifika veya ek icerik yuzu varsa fotografini ekle.",
+    title: "Ek bilgi fotoğrafı",
+    text: "Alerjen, uyarı, sertifika veya ek içerik yüzü varsa fotoğrafını ekle.",
     input: extraFileInput
   },
   extraChoice: {
-    title: "Eklemek istedigin baska fotograf var mi?",
-    text: "Alerjen, uyari veya sertifika yuzu varsa ekleyebilirsin. Yoksa sonucu gosterelim."
+    title: "Eklemek istediğin başka fotoğraf var mı?",
+    text: "Alerjen, uyarı veya sertifika yüzü varsa ekleyebilirsin. Yoksa sonucu gösterelim."
   }
 };
 
 const LEVEL_UI = {
   certified: {
-    title: "Colyak icin uygundur",
+    title: "Çölyak için uygundur",
     color: "#dcfce7"
   },
   declared_gf_with_ingredients: {
-    title: "Uretici beyanina gore glutensiz",
+    title: "Üretici beyanına göre glutensiz",
     color: "#ecfccb"
   },
   declared_gf_no_ingredients: {
-    title: "Uretici glutensiz beyani",
+    title: "Üretici glutensiz beyanı",
     color: "#fef3c7"
   },
   gluten_present: {
-    title: "Gluten iceriyor",
+    title: "Gluten içeriyor",
     color: "#fee2e2"
   },
   declaration_conflict: {
-    title: "Celiskili bilgi",
+    title: "Çelişkili bilgi",
     color: "#ffedd5"
   },
   ingredients_safe_no_claim: {
-    title: "Icerik uygun gorunuyor",
+    title: "İçerik uygun görünüyor",
     color: "#fef3c7"
   },
   insufficient_data: {
@@ -93,7 +96,7 @@ const LEVEL_UI = {
     color: "#f3f4f6"
   },
   certification_suspended: {
-    title: "Sertifika gecersiz",
+    title: "Sertifika geçersiz",
     color: "#ffedd5"
   }
 };
@@ -116,9 +119,10 @@ function setBackendResult(data) {
 }
 
 function setUserMessage(title, message, color = "#f3f4f6") {
-  userResultEl.classList.remove("empty-state");
-  userResultEl.style.background = color;
-  userResultEl.replaceChildren();
+  resultSection.classList.add("hidden");
+  statusSection.classList.remove("hidden");
+  userStatusEl.style.background = color;
+  userStatusEl.replaceChildren();
 
   const titleEl = document.createElement("h3");
   titleEl.textContent = title;
@@ -126,10 +130,13 @@ function setUserMessage(title, message, color = "#f3f4f6") {
   const messageEl = document.createElement("p");
   messageEl.textContent = message;
 
-  userResultEl.append(titleEl, messageEl);
+  userStatusEl.append(titleEl, messageEl);
 }
 
 function renderUserResult(data) {
+  statusSection.classList.add("hidden");
+  resultSection.classList.remove("hidden");
+
   const level = data?.decision?.level || "insufficient_data";
   const ui = LEVEL_UI[level] || LEVEL_UI.insufficient_data;
   const reason = data?.decision?.reason || "";
@@ -171,9 +178,9 @@ function hidePhotoInputs() {
 
 function updatePhotoProgress() {
   const items = [
-    ["On yuz", photoFiles.front],
-    ["Icindekiler", photoFiles.ingredients],
-    ["Ek fotograf", photoFiles.extra]
+    ["Ön yüz", photoFiles.front],
+    ["İçindekiler", photoFiles.ingredients],
+    ["Ek fotoğraf", photoFiles.extra]
   ];
 
   photoProgress.replaceChildren();
@@ -222,7 +229,7 @@ function startPhotoFlow() {
   ingredientsFileInput.value = "";
   extraFileInput.value = "";
 
-  setUserMessage("Etiket fotografi gerekiyor", "Seni adim adim yonlendirecegiz.", "#f3f4f6");
+  setUserMessage("Etiket fotoğrafı gerekiyor", "Seni adım adım yönlendireceğiz.", "#f3f4f6");
   showPhotoStep("front");
 }
 
@@ -335,7 +342,7 @@ async function stopCameraScan() {
       barcodeCodeReader.reset();
     }
   } catch (err) {
-    console.log("Kamera kapatma hatasi:", err?.message || err);
+    console.log("Kamera kapatma hatası:", err?.message || err);
   }
 
   stopVideoTracks();
@@ -367,14 +374,14 @@ async function handleDetectedBarcode(rawText) {
 
 async function startCameraScan() {
   if (cameraRunning) {
-    setUserMessage("Kamera acik", "Barkodu kameraya yaklastir.", "#f3f4f6");
+    setUserMessage("Kamera açık", "Barkodu kameraya yaklaştır.", "#f3f4f6");
     return;
   }
 
   const zxing = getZxing();
 
   if (!zxing?.BrowserMultiFormatReader) {
-    setUserMessage("Kamera hazir degil", "Barkod okuyucu yuklenemedi. Internet baglantisini kontrol et.", "#fee2e2");
+    setUserMessage("Kamera hazır değil", "Barkod okuyucu yüklenemedi. İnternet bağlantısını kontrol et.", "#fee2e2");
     return;
   }
 
@@ -382,7 +389,7 @@ async function startCameraScan() {
     cameraRunning = true;
     barcodeDetected = false;
     stopCameraBtn.classList.remove("hidden");
-    setUserMessage("Barkod taraniyor", "Barkodu net ve iyi isikta kameraya goster.", "#f3f4f6");
+    setUserMessage("Barkod taranıyor", "Barkodu net ve iyi ışıkta kameraya göster.", "#f3f4f6");
 
     barcodeCodeReader = createZxingReader(zxing);
     const videoEl = createBarcodeVideoElement();
@@ -411,9 +418,9 @@ async function startCameraScan() {
       callback
     );
   } catch (e) {
-    console.error("Kamera barkod tarama hatasi:", e);
+    console.error("Kamera barkod tarama hatası:", e);
     await stopCameraScan();
-    setUserMessage("Kamera acilamadi", e.message || "Barkod okuyucu baslatilamadi.", "#fee2e2");
+    setUserMessage("Kamera açılamadı", e.message || "Barkod okuyucu başlatılamadı.", "#fee2e2");
   }
 }
 
@@ -421,13 +428,13 @@ async function scanProduct() {
   const barcode = (barcodeInputEl.value || "").trim();
 
   if (!barcode) {
-    setUserMessage("Barkod gerekli", "Barkodu gir ya da barkodsuz fotograf akisini baslat.", "#fef3c7");
+    setUserMessage("Barkod gerekli", "Barkodu gir ya da barkodsuz fotoğraf akışını başlat.", "#fef3c7");
     showManualBarcode();
     return;
   }
 
   await stopCameraScan();
-  setUserMessage("Urun araniyor", "Barkod sonucu kontrol ediliyor.", "#f3f4f6");
+  setUserMessage("Ürün aranıyor", "Barkod sonucu kontrol ediliyor.", "#f3f4f6");
 
   try {
     const r = await fetch(`${getBaseUrl()}/scan/${barcode}`);
@@ -442,7 +449,7 @@ async function scanProduct() {
       photoSection.classList.add("hidden");
     }
   } catch (e) {
-    setUserMessage("Backend hata", e.message, "#fee2e2");
+    setUserMessage("Backend hatası", e.message, "#fee2e2");
   }
 }
 
@@ -515,7 +522,7 @@ async function analyzePhotoFlow() {
     return;
   }
 
-  setUserMessage("Fotograflar analiz ediliyor", "Bu kisim biraz surebilir.", "#f3f4f6");
+  setUserMessage("Fotoğraflar analiz ediliyor", "Bu kısım biraz sürebilir.", "#f3f4f6");
 
   try {
     const images = [
@@ -545,7 +552,7 @@ async function analyzePhotoFlow() {
       ocrTextEl.value = JSON.stringify(extracted, null, 2);
     }
   } catch (e) {
-    setUserMessage("Analiz hatasi", e.message, "#fee2e2");
+    setUserMessage("Analiz hatası", e.message, "#fee2e2");
   }
 }
 
@@ -572,7 +579,7 @@ async function analyzeTextFromDebug() {
   const barcode = (barcodeInputEl.value || "").trim();
 
   if (!labelText || labelText.length < 3) {
-    setBackendResult("Analiz icin metin gir.");
+    setBackendResult("Analiz için metin gir.");
     return;
   }
 
@@ -590,7 +597,7 @@ async function analyzeTextFromDebug() {
     setBackendResult(data);
     renderUserResult(data);
   } catch (e) {
-    setBackendResult("Backend hata: " + e.message);
+    setBackendResult("Backend hatası: " + e.message);
   }
 }
 

@@ -140,6 +140,22 @@ h3 {
   gap: 8px;
 }
 
+.status-message {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.status-message h3 {
+  margin: 0;
+}
+
+.status-message p {
+  color: #374151;
+}
+
 .empty-state {
   display: flex;
   align-items: center;
