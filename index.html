@@ -17,176 +17,108 @@
 
   <section class="hero">
     <h1>EatSure</h1>
-    <p class="muted">
-      Barkod veya etiket fotoğrafı ile ürün kontrolü
-    </p>
+    <p class="muted">Urunu kontrol etmek icin seni adim adim yonlendirecegiz.</p>
   </section>
 
+  <section class="card" id="startSection">
+    <h2>Baslayalim</h2>
+    <p class="muted small">Bir yol sec. Gerekirse sonraki adimi EatSure acacak.</p>
 
-  <!-- BARKOD BÖLÜMÜ -->
+    <div class="action-list">
+      <button id="startCameraBtn" class="btn btn-primary">Barkodu Tara</button>
+      <button id="manualBarcodeBtn" class="btn btn-secondary">Barkodu Kendim Girecegim</button>
+      <button id="noBarcodeBtn" class="btn btn-secondary">Barkod Yok</button>
+    </div>
 
-  <section class="card">
-
-    <h2>Barkod ile kontrol et</h2>
-
-    <p class="muted small">
-      Önce barkodu gir veya kamerayla okut.
-    </p>
-
-    <label class="label">Barkod</label>
-
-    <input
-      id="barcodeInput"
-      class="input"
-      type="text"
-      inputmode="numeric"
-      autocomplete="off"
-      placeholder="Örn: 8006980240651"
-    />
-
-    <div class="row wrap-row">
-
-      <button id="scanProductBtn" class="btn btn-primary">
-        Barkodu Sorgula
-      </button>
-
-      <button id="startCameraBtn" class="btn btn-secondary">
-        Kamera ile Tara
-      </button>
-
-      <button id="stopCameraBtn" class="btn btn-secondary">
-        Kamerayı Kapat
-      </button>
-
+    <div id="manualBarcodePanel" class="manual-panel hidden">
+      <label class="label" for="barcodeInput">Barkod</label>
+      <input
+        id="barcodeInput"
+        class="input"
+        type="text"
+        inputmode="numeric"
+        autocomplete="off"
+        placeholder="Orn: 8006980240651"
+      />
+      <button id="scanProductBtn" class="btn btn-primary">Devam Et</button>
     </div>
 
     <div id="reader" class="reader-box"></div>
-
+    <button id="stopCameraBtn" class="btn btn-secondary hidden">Kamerayi Kapat</button>
   </section>
 
-
-
-  <!-- FOTOĞRAF BÖLÜMÜ -->
-
-  <section class="card" id="photoSection">
-
-    <h2>Etiket fotoğrafı ile kontrol et</h2>
-
-    <p class="muted small">
-      İstersen barkod girmeden doğrudan etiket fotoğrafı yükleyebilirsin. Barkod sonucu yetersizse veya daha ayrıntılı kontrol istersen de bu alanı kullanabilirsin.
-    </p>
-
-    <label class="label">Etiket fotoğrafı</label>
+  <section class="card hidden" id="photoSection">
+    <h2 id="photoStepTitle">Etiket fotografi</h2>
+    <p id="photoStepText" class="muted small"></p>
 
     <input
-      id="fileInput"
+      id="frontFileInput"
       type="file"
       accept="image/*"
-      class="file"
+      capture="environment"
+      class="file hidden"
     />
 
-    <div class="row wrap-row">
+    <input
+      id="ingredientsFileInput"
+      type="file"
+      accept="image/*"
+      capture="environment"
+      class="file hidden"
+    />
 
-      <button id="runOcr" class="btn btn-secondary">
-        OCR (test)
-      </button>
+    <input
+      id="extraFileInput"
+      type="file"
+      accept="image/*"
+      capture="environment"
+      class="file hidden"
+    />
 
-      <button id="sendToBackend" class="btn btn-primary">
-        Fotoğrafı Analiz Et
-      </button>
+    <button id="choosePhotoBtn" class="btn btn-primary">Fotograf Cek veya Sec</button>
 
+    <div id="extraChoicePanel" class="action-list hidden">
+      <button id="addExtraPhotoBtn" class="btn btn-secondary">Evet, ek fotograf var</button>
+      <button id="skipExtraPhotoBtn" class="btn btn-primary">Hayir, sonucu goster</button>
     </div>
 
-    <div class="preview">
-      <img id="previewImg" />
-    </div>
-
+    <div id="photoProgress" class="photo-progress"></div>
   </section>
 
-
-
-  <!-- KULLANICI SONUCU -->
-
   <section class="card">
-
-    <h2>Sonuç</h2>
-
+    <h2>Sonuc</h2>
     <div id="userResult" class="user-result empty-state">
-      Henüz sonuç yok.
+      Henuz sonuc yok.
     </div>
-
-    <div id="photoPromptSection" class="photo-prompt hidden">
-      <p id="photoPromptText" class="muted small"></p>
-      <button id="openPhotoSectionBtn" class="btn btn-secondary btn-small">
-        Etiket Fotoğrafı Alanına Git
-      </button>
-    </div>
-
   </section>
 
+  <section class="debug-shell">
+    <button id="toggleDebugBtn" class="btn btn-secondary btn-small">Debug</button>
 
+    <section id="debugPanel" class="hidden">
+      <section class="card">
+        <h2>OCR / AI Extraction</h2>
+        <textarea
+          id="ocrText"
+          class="textarea"
+          rows="10"
+          placeholder="OCR veya AI extraction sonucu..."
+        ></textarea>
+        <button id="analyzeTextBtn" class="btn btn-primary">Bu Metni Analiz Et</button>
+      </section>
 
-  <!-- DEBUG AÇ / KAPA -->
-
-  <section class="card">
-
-    <button id="toggleDebugBtn" class="btn btn-secondary">
-      Debug Bilgilerini Göster
-    </button>
-
-  </section>
-
-
-
-  <!-- DEBUG PANEL -->
-
-  <section id="debugPanel" class="hidden">
-
-    <section class="card">
-
-      <h2>OCR / AI Extraction</h2>
-
-      <textarea
-        id="ocrText"
-        class="textarea"
-        rows="10"
-        placeholder="OCR veya AI extraction sonucu..."
-      ></textarea>
-
-      <div class="row wrap-row" style="margin-top: 12px;">
-        <button id="analyzeTextBtn" class="btn btn-primary">
-          Bu Metni Analiz Et
-        </button>
-      </div>
-
+      <section class="card">
+        <h2>Backend Sonucu</h2>
+        <pre id="backendResult" class="pre">Henuz sonuc yok.</pre>
+      </section>
     </section>
-
-
-    <section class="card">
-
-      <h2>Backend Sonucu</h2>
-
-      <pre id="backendResult" class="pre">
-Henüz sonuç yok.
-      </pre>
-
-    </section>
-
   </section>
-
 
 </main>
-
-
 
 <script
 src="https://unpkg.com/@zxing/browser@0.2.0/umd/zxing-browser.min.js"
 onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.0/umd/zxing-browser.min.js'">
-</script>
-
-<script
-src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"
-onerror="this.onerror=null;this.src='https://unpkg.com/tesseract.js@5/dist/tesseract.min.js'">
 </script>
 
 <script src="app.js"></script>

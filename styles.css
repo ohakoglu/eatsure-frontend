@@ -6,11 +6,11 @@ body {
 }
 
 .wrap {
-  max-width: 760px;
+  max-width: 680px;
   margin: 0 auto;
   padding: 16px;
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
 .hero h1 {
@@ -18,14 +18,15 @@ body {
   font-size: 32px;
 }
 
-.hero p {
+.hero p,
+p {
   margin: 0;
 }
 
 .card {
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 14px;
+  border-radius: 8px;
   padding: 16px;
 }
 
@@ -34,9 +35,13 @@ h2 {
   font-size: 18px;
 }
 
+h3 {
+  margin: 0 0 8px 0;
+}
+
 .label {
   display: block;
-  margin: 8px 0 6px 0;
+  margin: 12px 0 6px 0;
   font-size: 13px;
   color: #6b7280;
 }
@@ -45,10 +50,10 @@ h2 {
 .file,
 .textarea {
   width: 100%;
-  padding: 10px 12px;
+  padding: 12px;
   font-size: 16px;
   border: 1px solid #d1d5db;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fff;
   box-sizing: border-box;
 }
@@ -58,28 +63,32 @@ h2 {
   resize: vertical;
 }
 
-.row {
-  display: flex;
+.action-list {
+  display: grid;
   gap: 10px;
   margin-top: 12px;
 }
 
-.wrap-row {
-  flex-wrap: wrap;
+.manual-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .btn {
   border: 1px solid #d1d5db;
   background: #fff;
   color: #111827;
-  padding: 10px 14px;
-  border-radius: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 650;
+  cursor: pointer;
 }
 
 .btn:disabled {
   opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .btn-primary {
@@ -96,63 +105,23 @@ h2 {
 .btn-small {
   width: auto;
   padding: 8px 12px;
-  font-size: 14px;
-  margin-top: 4px;
-}
-
-.preview {
-  margin-top: 12px;
-  border: 1px dashed #d1d5db;
-  border-radius: 12px;
-  background: #fff;
-  min-height: 140px;
-  display: grid;
-  place-items: center;
-  padding: 10px;
-}
-
-.preview img {
-  max-width: 100%;
-  max-height: 360px;
-  display: none;
-  border-radius: 10px;
+  font-size: 13px;
 }
 
 .reader-box {
   width: 100%;
-  max-width: 360px;
   margin-top: 12px;
   overflow: hidden;
-  border-radius: 12px;
-}
-
-.pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: #0b1020;
-  color: #e5e7eb;
-  border-radius: 12px;
-  padding: 12px;
-  overflow: auto;
-  max-height: 420px;
+  border-radius: 8px;
 }
 
 .user-result {
   border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 14px;
-  min-height: 120px;
-}
-
-.photo-prompt {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #e5e7eb;
-}
-
-.photo-prompt p {
-  margin: 0 0 8px 0;
+  min-height: 110px;
+  display: grid;
+  gap: 8px;
 }
 
 .empty-state {
@@ -163,22 +132,53 @@ h2 {
   background: #fff;
 }
 
+.photo-progress {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.progress-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: #374151;
+  background: #f9fafb;
+}
+
+.debug-shell {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #0b1020;
+  color: #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  overflow: auto;
+  max-height: 420px;
+}
+
 .muted {
   color: #6b7280;
 }
 
 .small {
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.45;
 }
-
-/* 🔒 GİZLİ ALANLAR */
 
 .hidden {
   display: none !important;
 }
 
 @media (max-width: 640px) {
-
   .wrap {
     padding: 12px;
   }
@@ -187,24 +187,7 @@ h2 {
     font-size: 28px;
   }
 
-  .row {
-    flex-direction: column;
-  }
-
-  .wrap-row {
-    flex-direction: column;
-  }
-
   .btn {
     width: 100%;
   }
-
-  .btn-small {
-    width: 100%;
-  }
-
-  .reader-box {
-    max-width: 100%;
-  }
-
 }
