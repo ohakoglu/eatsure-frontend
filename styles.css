@@ -5,6 +5,12 @@ body {
   color: #111827;
 }
 
+:root {
+  --eatsure-green: #10B75A;
+  --eatsure-navy: #0B2D6B;
+  --eatsure-white: #FFFFFF;
+}
+
 .wrap {
   max-width: 680px;
   margin: 0 auto;
@@ -13,9 +19,14 @@ body {
   gap: 14px;
 }
 
-.hero h1 {
-  margin: 0 0 4px 0;
-  font-size: 32px;
+.brand-heading {
+  margin: 0 0 8px 0;
+}
+
+.brand-logo {
+  display: block;
+  width: min(280px, 82vw);
+  height: auto;
 }
 
 .hero p,
@@ -92,14 +103,14 @@ h3 {
 }
 
 .btn-primary {
-  background: #2563eb;
+  background: var(--eatsure-green);
   color: #fff;
-  border-color: #2563eb;
+  border-color: var(--eatsure-green);
 }
 
 .btn-secondary {
   background: #fff;
-  color: #111827;
+  color: var(--eatsure-navy);
 }
 
 .btn-small {
@@ -183,8 +194,8 @@ h3 {
     padding: 12px;
   }
 
-  .hero h1 {
-    font-size: 28px;
+  .brand-logo {
+    width: min(240px, 86vw);
   }
 
   .btn {
