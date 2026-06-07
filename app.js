@@ -286,20 +286,70 @@ function createZxingReader(zxing) {
 function createBarcodeVideoElement() {
   readerEl.replaceChildren();
 
+  const shellEl = document.createElement("div");
+  shellEl.className = "scanner-shell";
+
   const videoEl = document.createElement("video");
   videoEl.setAttribute("playsinline", "true");
   videoEl.setAttribute("muted", "true");
   videoEl.autoplay = true;
   videoEl.muted = true;
+  videoEl.className = "scanner-video";
 
-  videoEl.style.width = "100%";
-  videoEl.style.maxHeight = "360px";
-  videoEl.style.objectFit = "cover";
-  videoEl.style.borderRadius = "12px";
-  videoEl.style.background = "#111";
+  const overlayEl = document.createElement("div");
+  overlayEl.className = "scanner-overlay";
 
-  readerEl.appendChild(videoEl);
+  const frameEl = document.createElement("div");
+  frameEl.className = "scanner-frame";
+
+  overlayEl.appendChild(frameEl);
+  shellEl.append(videoEl, overlayEl);
+  readerEl.appendChild(shellEl);
   return videoEl;
+}
+
+function logBarcodeVideoTrack(videoEl, source) {
+  const track = videoEl?.srcObject?.getVideoTracks?.()[0];
+
+  if (!track) {
+    console.log("Barkod kamera track bulunamadı:", source);
+    return;
+  }
+
+  console.log("Barkod kamera ayarları:", source, track.getSettings?.());
+
+  if (typeof track.getCapabilities === "function") {
+    console.log("Barkod kamera capabilities:", source, track.getCapabilities());
+  }
+}
+
+async function startZxingWithFallback(reader, videoEl, callback) {
+  const constraints = {
+    video: {
+      facingMode: { ideal: "environment" },
+      width: { ideal: 1280 },
+      height: { ideal: 720 }
+    },
+    audio: false
+  };
+
+  if (typeof reader.decodeFromConstraints === "function") {
+    try {
+      const controls = await reader.decodeFromConstraints(
+        constraints,
+        videoEl,
+        callback
+      );
+      logBarcodeVideoTrack(videoEl, "decodeFromConstraints");
+      return controls;
+    } catch (err) {
+      console.log("decodeFromConstraints başarısız, eski kamera yöntemi deneniyor:", err?.message || err);
+    }
+  }
+
+  const controls = await reader.decodeFromVideoDevice(null, videoEl, callback);
+  logBarcodeVideoTrack(videoEl, "decodeFromVideoDevice fallback");
+  return controls;
 }
 
 function getBarcodeErrorName(error) {
@@ -412,8 +462,8 @@ async function startCameraScan() {
       }
     };
 
-    barcodeScanControls = await barcodeCodeReader.decodeFromVideoDevice(
-      null,
+    barcodeScanControls = await startZxingWithFallback(
+      barcodeCodeReader,
       videoEl,
       callback
     );
