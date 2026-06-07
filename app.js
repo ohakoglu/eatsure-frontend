@@ -36,6 +36,8 @@ let barcodeCodeReader = null;
 let barcodeScanControls = null;
 let cameraRunning = false;
 let barcodeDetected = false;
+let productLookupInFlight = false;
+let productLookupSlowTimer = null;
 
 let currentPhotoStep = null;
 let photoFiles = {
@@ -118,9 +120,10 @@ function setBackendResult(data) {
   }
 }
 
-function setUserMessage(title, message, color = "#f3f4f6") {
+function setUserMessage(title, message, color = "#f3f4f6", options = {}) {
   resultSection.classList.add("hidden");
   statusSection.classList.remove("hidden");
+  userStatusEl.classList.toggle("is-loading", !!options.loading);
   userStatusEl.style.background = color;
   userStatusEl.replaceChildren();
 
@@ -133,6 +136,65 @@ function setUserMessage(title, message, color = "#f3f4f6") {
   userStatusEl.append(titleEl, messageEl);
 }
 
+function setProductLookupBusy(isBusy) {
+  productLookupInFlight = isBusy;
+  startCameraBtn.disabled = isBusy;
+  manualBarcodeBtn.disabled = isBusy;
+  scanProductBtn.disabled = isBusy;
+  barcodeInputEl.disabled = isBusy;
+}
+
+function clearProductLookupSlowTimer() {
+  if (productLookupSlowTimer) {
+    clearTimeout(productLookupSlowTimer);
+    productLookupSlowTimer = null;
+  }
+}
+
+function getProductIdentity(data) {
+  const identity =
+    data?.productIdentity && typeof data.productIdentity === "object"
+      ? data.productIdentity
+      : null;
+
+  const name =
+    data?.name ||
+    data?.productName ||
+    data?.product_name ||
+    identity?.name ||
+    data?.product?.product_name ||
+    null;
+
+  const brand =
+    data?.brand ||
+    data?.brands ||
+    identity?.brand ||
+    data?.product?.brands ||
+    null;
+
+  const barcode =
+    data?.barcode ||
+    identity?.barcode ||
+    barcodeInputEl.value ||
+    null;
+
+  return {
+    name: name || "Ürün adı bulunamadı",
+    brand: brand || "Marka bulunamadı",
+    barcode: barcode || "Barkod bulunamadı",
+    source: identity?.source || data?.meta?.source || "unknown"
+  };
+}
+
+function formatProductIdentitySource(source) {
+  if (source === "off" || source === "openfoodfacts_scan") return "OFF";
+  if (source === "front_ocr") return "OCR";
+  if (source === "database_cache") return "Cache";
+  if (source === "database_stale_fallback") return "Cache";
+  if (source === "unknown") return "Bilinmiyor";
+  return String(source || "Bilinmiyor");
+}
+
 function renderUserResult(data) {
   statusSection.classList.add("hidden");
   resultSection.classList.remove("hidden");
@@ -140,25 +202,39 @@ function renderUserResult(data) {
   const level = data?.decision?.level || "insufficient_data";
   const ui = LEVEL_UI[level] || LEVEL_UI.insufficient_data;
   const reason = data?.decision?.reason || "";
-  const brand = data?.brand || "";
-  const name = data?.name || "";
+  const productIdentity = getProductIdentity(data);
 
   userResultEl.classList.remove("empty-state");
   userResultEl.style.background = ui.color;
   userResultEl.replaceChildren();
 
+  const identityEl = document.createElement("div");
+  identityEl.className = "product-identity";
+
+  const identityRows = [
+    ["Marka", productIdentity.brand],
+    ["Ürün adı", productIdentity.name],
+    ["Barkod", productIdentity.barcode],
+    ["Kaynak", formatProductIdentitySource(productIdentity.source)]
+  ];
+
+  for (const [label, value] of identityRows) {
+    const rowEl = document.createElement("p");
+    const labelEl = document.createElement("span");
+    labelEl.textContent = `${label}: `;
+    const valueEl = document.createElement("strong");
+    valueEl.textContent = value;
+    rowEl.append(labelEl, valueEl);
+    identityEl.appendChild(rowEl);
+  }
+
   const titleEl = document.createElement("h3");
   titleEl.textContent = ui.title;
-
-  const productEl = document.createElement("p");
-  const productStrongEl = document.createElement("strong");
-  productStrongEl.textContent = [brand, name].filter(Boolean).join(" / ");
-  productEl.appendChild(productStrongEl);
 
   const reasonEl = document.createElement("p");
   reasonEl.textContent = reason;
 
-  userResultEl.append(titleEl, productEl, reasonEl);
+  userResultEl.append(identityEl, titleEl, reasonEl);
 }
 
 function isInsufficientResult(data) {
@@ -475,6 +551,10 @@ async function startCameraScan() {
 }
 
 async function scanProduct() {
+  if (productLookupInFlight) {
+    return;
+  }
+
   const barcode = (barcodeInputEl.value || "").trim();
 
   if (!barcode) {
@@ -484,12 +564,28 @@ async function scanProduct() {
   }
 
   await stopCameraScan();
-  setUserMessage("Ürün aranıyor", "Barkod sonucu kontrol ediliyor.", "#f3f4f6");
+  setProductLookupBusy(true);
+  setUserMessage(
+    `Barkod okundu: ${barcode}`,
+    "Ürün veritabanında aranıyor...",
+    "#f3f4f6",
+    { loading: true }
+  );
+
+  productLookupSlowTimer = setTimeout(() => {
+    setUserMessage(
+      `Barkod okundu: ${barcode}`,
+      "OpenFoodFacts kontrol ediliyor veya sunucu uyanıyor olabilir. Lütfen bekleyin...",
+      "#f3f4f6",
+      { loading: true }
+    );
+  }, 3500);
 
   try {
     const r = await fetch(`${getBaseUrl()}/scan/${barcode}`);
     const data = await r.json();
 
+    clearProductLookupSlowTimer();
     setBackendResult(data);
     renderUserResult(data);
 
@@ -499,7 +595,11 @@ async function scanProduct() {
       photoSection.classList.add("hidden");
     }
   } catch (e) {
+    clearProductLookupSlowTimer();
     setUserMessage("Backend hatası", e.message, "#fee2e2");
+  } finally {
+    clearProductLookupSlowTimer();
+    setProductLookupBusy(false);
   }
 }
 
