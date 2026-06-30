@@ -245,6 +245,38 @@ h3 {
   color: #6b7280;
 }
 
+.logo-detection {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(17, 24, 39, 0.12);
+}
+
+.logo-detection h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.logo-detection p {
+  margin: 0;
+  color: #374151;
+}
+
+.logo-detection ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.logo-detection li {
+  margin: 2px 0;
+  color: #374151;
+}
+
+.logo-detection-warning {
+  font-size: 12px;
+  color: #6b7280 !important;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

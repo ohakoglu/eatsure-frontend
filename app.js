@@ -195,6 +195,63 @@ function formatProductIdentitySource(source) {
   return String(source || "Bilinmiyor");
 }
 
+function getFrontLogoDetection(data) {
+  const detection = data?.frontSignals?.logoDetection;
+
+  if (!detection || typeof detection !== "object") {
+    return {
+      logos: [],
+      warning: "Bu logo bilgisi gluten kararı için kullanılmamıştır."
+    };
+  }
+
+  return {
+    logos: Array.isArray(detection.logos) ? detection.logos : [],
+    warning:
+      detection.warning ||
+      "Bu logo bilgisi gluten kararı için kullanılmamıştır."
+  };
+}
+
+function formatLogoScore(score) {
+  if (typeof score !== "number") return "güven değeri yok";
+  return `yaklaşık güven: ${Math.round(score * 100)}%`;
+}
+
+function buildLogoDetectionElement(data) {
+  const detection = getFrontLogoDetection(data);
+  const wrapperEl = document.createElement("div");
+  wrapperEl.className = "logo-detection";
+
+  const titleEl = document.createElement("h4");
+  titleEl.textContent = "Algılanan logolar";
+  wrapperEl.appendChild(titleEl);
+
+  if (detection.logos.length === 0) {
+    const emptyEl = document.createElement("p");
+    emptyEl.textContent = "Logo algılanmadı.";
+    wrapperEl.appendChild(emptyEl);
+  } else {
+    const listEl = document.createElement("ul");
+
+    for (const logo of detection.logos) {
+      const itemEl = document.createElement("li");
+      const description = logo?.description || "Açıklama yok";
+      itemEl.textContent = `${description} (${formatLogoScore(logo?.score)})`;
+      listEl.appendChild(itemEl);
+    }
+
+    wrapperEl.appendChild(listEl);
+  }
+
+  const warningEl = document.createElement("p");
+  warningEl.className = "logo-detection-warning";
+  warningEl.textContent = detection.warning;
+  wrapperEl.appendChild(warningEl);
+
+  return wrapperEl;
+}
+
 function renderUserResult(data) {
   statusSection.classList.add("hidden");
   resultSection.classList.remove("hidden");
@@ -234,7 +291,7 @@ function renderUserResult(data) {
   const reasonEl = document.createElement("p");
   reasonEl.textContent = reason;
 
-  userResultEl.append(identityEl, titleEl, reasonEl);
+  userResultEl.append(identityEl, titleEl, reasonEl, buildLogoDetectionElement(data));
 }
 
 function isInsufficientResult(data) {
