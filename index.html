@@ -85,11 +85,14 @@
       <button id="skipExtraPhotoBtn" class="btn btn-primary">Hayır, sonucu göster</button>
     </div>
 
+    <label><input id="externalProcessingConsent" type="checkbox" /> Fotoğraflarımın metin çıkarılması için Google Vision veya OpenAI'a iletilmesini kabul ediyorum. Fotoğraflar uygulamanın veritabanına kaydedilmez. İşleme sağlayıcının saklama koşullarına tabidir; kişisel bilgi içeren fotoğraf göndermeyin.</label>
+    <button id="reanalyzeBtn" class="btn btn-secondary">Seçili tüm fotoğraflarla yeniden analiz et</button>
     <div id="photoProgress" class="photo-progress"></div>
   </section>
 
   <section class="card hidden" id="statusSection">
-    <div id="userStatus" class="status-message"></div>
+    <div id="userStatus" class="status-message" role="status" aria-live="polite"></div>
+    <button id="retryBtn" class="btn btn-secondary hidden">Tekrar dene</button>
   </section>
 
   <section class="card hidden" id="resultSection">
@@ -97,6 +100,29 @@
     <div id="userResult" class="user-result"></div>
   </section>
 
+  <section class="card">
+    <h2>Hesap</h2>
+    <p id="sessionStatus">Katkı göndermek için mevcut hesabınızla oturum açın.</p>
+    <form id="loginForm">
+      <label>E-posta <input id="emailInput" type="email" autocomplete="username" required /></label>
+      <label>Parola <input id="passwordInput" type="password" autocomplete="current-password" required /></label>
+      <button id="loginBtn" type="submit" class="btn btn-secondary">Giriş yap</button>
+    </form>
+    <button id="loadContributionsBtn" class="btn btn-secondary">Katkı geçmişim</button>
+    <ul id="contributionHistory"></ul>
+    <button id="logoutBtn" class="btn btn-secondary hidden">Oturumu kapat</button>
+  </section>
+  <section id="contributionSection" class="card hidden">
+    <h2>Bilgi düzeltme veya sonuca itiraz</h2>
+    <p>Katkılar incelemeye alınır; ana ürün kaydını doğrudan değiştirmez. Barkod gereklidir.</p>
+    <form id="contributionForm">
+      <label>Katkı türü <select id="contributionKind"><option value="decision_dispute">Sonuca itiraz</option><option value="label_correction">Etiket bilgisi düzeltme</option><option value="new_product">Yeni ürün bilgisi</option></select></label>
+      <label>Açıklama <textarea id="contributionNote" minlength="10" maxlength="5000" required></textarea></label>
+      <label><input id="retentionConsent" type="checkbox" required /> Açıklamamın inceleme için en fazla 30 gün saklanmasını kabul ediyorum. Kişisel veya sağlık bilgisi eklemeyeceğim.</label>
+      <button id="submitContributionBtn" class="btn btn-secondary" type="submit">İncelemeye gönder</button>
+    </form>
+    <p id="contributionStatus" role="status" aria-live="polite"></p>
+  </section>
   <section class="debug-shell">
     <button id="toggleDebugBtn" class="btn btn-secondary btn-small">Debug</button>
 

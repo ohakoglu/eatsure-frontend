@@ -1,39 +1,11 @@
-# eatsure-frontend
+# EatSure frontend
 
-Static MVP frontend for EatSure barcode and label-photo analysis.
+Static mobile frontend. Serve with a static server; configure the API origin before `app.js` via `window.EATSURE_CONFIG = { backendBase: "https://your-api.example" }`. The backend must explicitly allow the frontend origin. The historical Render URL remains the fallback; no deployment was made.
 
-## Local setup
+The UI supports barcode lookup, two required label photos and an optional extra photo, previews/replacement, explicit external processing consent, full reanalysis, HTTP error/retry handling, timeout and duplicate-request protection. Evidence, source and evaluation date appear with results. Cross-contamination is presented as “Çölyak için uygun değil”, rather than falsely asserting measured gluten content.
 
-Open `index.html` directly, or serve the folder with any static file server.
+Existing Supabase accounts can log in through the API. Access tokens are held in memory and cleared on reload/sign-out; no service-role key belongs in this repository. Contribution/appeal notes are pending review, with history and withdrawal. Configure the backend migration and scheduled retention job before enabling contributions publicly. No self-service signup or reviewer management UI is claimed.
 
-The default backend is:
+Debug UI is hidden unless `window.EATSURE_CONFIG.enableDebug === true`; production API debug remains disabled regardless of this client option.
 
-```text
-https://eatsure-backend-4dkh.onrender.com
-```
-
-For local development, override it in the browser console:
-
-```js
-localStorage.setItem("EATSURE_BACKEND_BASE", "http://localhost:3000");
-location.reload();
-```
-
-To reset:
-
-```js
-localStorage.removeItem("EATSURE_BACKEND_BASE");
-location.reload();
-```
-
-Deploys can also define:
-
-```html
-<script>
-  window.EATSURE_CONFIG = {
-    backendBase: "https://your-backend.example"
-  };
-</script>
-```
-
-Place that script before `app.js`.
+Browser regressions run from the sibling backend using `npm test`, a local static server, Chromium and mocked API routes. No live API or OCR calls are used by those tests.
