@@ -37,6 +37,10 @@ let barcodeScanControls = null;
 let cameraRunning = false;
 let barcodeDetected = false;
 let productLookupInFlight = false;
+let photoAnalysisInFlight = false;
+let accessToken = null;
+let lastRetry = null;
+const previewUrls = new Map();
 let productLookupSlowTimer = null;
 
 let currentPhotoStep = null;
@@ -82,7 +86,7 @@ const LEVEL_UI = {
     color: "#fef3c7"
   },
   gluten_present: {
-    title: "Gluten içeriyor",
+    title: "Çölyak için uygun değil",
     color: "#fee2e2"
   },
   declaration_conflict: {
@@ -90,7 +94,7 @@ const LEVEL_UI = {
     color: "#ffedd5"
   },
   ingredients_safe_no_claim: {
-    title: "İçerik uygun görünüyor",
+    title: "Glutensiz olduğu doğrulanamadı",
     color: "#fef3c7"
   },
   insufficient_data: {
@@ -110,6 +114,37 @@ function getBaseUrl() {
     DEFAULT_BACKEND_BASE;
 
   return String(configuredBase).replace(/\/+$/, "");
+}
+
+
+async function requestJson(path, options = {}, timeoutMs = 70000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${getBaseUrl()}${path}`, { ...options, signal: controller.signal });
+    let data = {};
+    if (response.status !== 204) {
+      try { data = await response.json(); } catch { throw new Error("Sunucu yanıtı okunamadı. Lütfen tekrar deneyin."); }
+    }
+    if (!response.ok) {
+      if (response.status === 401) { accessToken = null; updateSession(); }
+      throw new Error(data.message || (response.status === 429 ? "Çok fazla istek. Biraz sonra tekrar deneyin." : "İstek tamamlanamadı. Lütfen tekrar deneyin."));
+    }
+    return data;
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error("İstek zaman aşımına uğradı. Fotoğraflarınız korunuyor; tekrar deneyebilirsiniz.");
+    throw error;
+  } finally { clearTimeout(timer); }
+}
+function showRetry(action) {
+  lastRetry = action;
+  document.getElementById("retryBtn").classList.remove("hidden");
+}
+function hideRetry() { document.getElementById("retryBtn").classList.add("hidden"); lastRetry = null; }
+function updateSession() {
+  document.getElementById("sessionStatus").textContent = accessToken ? "Oturum açık. Katkı ve itiraz gönderebilirsiniz." : "Katkı göndermek için mevcut hesabınızla oturum açın.";
+  document.getElementById("logoutBtn").classList.toggle("hidden", !accessToken);
+  if (!accessToken) document.getElementById("contributionHistory").replaceChildren();
 }
 
 function setBackendResult(data) {
@@ -292,6 +327,51 @@ function renderUserResult(data) {
   reasonEl.textContent = reason;
 
   userResultEl.append(identityEl, titleEl, reasonEl, buildLogoDetectionElement(data));
+  const evidenceEl = document.createElement("ul");
+  for (const evidence of data.analysis?.evidence || []) {
+    const item = document.createElement("li");
+    item.textContent = `${evidence.section}: ${evidence.matchedText}`;
+    evidenceEl.appendChild(item);
+  }
+  if (evidenceEl.childElementCount) userResultEl.appendChild(evidenceEl);
+  const sourcesEl = document.createElement("p");
+  sourcesEl.textContent = `Karar kaynakları: ${(data.decision?.sources || []).join(", ") || "Yeterli kaynak yok"}`;
+  userResultEl.appendChild(sourcesEl);
+  const dateEl = document.createElement("p");
+  const sourceDate = data.decision?.ui?.sourceDate;
+  dateEl.textContent = sourceDate && Number.isFinite(Date.parse(sourceDate)) ? `${data.decision?.ui?.staleFallback ? "Eski kaynak — yeniden doğrulama gerekli" : "Değerlendirme tarihi"}: ${new Date(sourceDate).toLocaleString("tr-TR")}` : "Kaynak tarihi doğrulanamadı";
+  userResultEl.appendChild(dateEl);
+  for (const warning of data.decision?.warnings || []) {
+    const warningEl = document.createElement("p");
+    const qualityWarnings = {
+      ocr_confidence_unavailable: "Metnin bazı bölümlerinde okuma güveni ölçülemiyor. Sonucu etiketle karşılaştırın.",
+      ocr_confidence_low: "Bazı kelimeler güvenilir okunamadı. Etiketi net ve yakın çekerek yeniden deneyin.",
+      ingredients_photo_unverified: "İçindekiler fotoğrafındaki içerik listesi doğrulanamadı. Bu yüzü yeniden çekin.",
+      independent_review_unavailable: "Ek görsel kontrol tamamlanamadı. Mevcut risk uyarılarını dikkate alın; daha sonra yeniden deneyin.",
+      independent_review_required: "Fotoğraf ve etiket değerlendirmesi arasındaki bulgular çözülemedi. Mevcut risk uyarılarını dikkate alın; üreticiden doğrulama veya uzman incelemesi gerekiyor."
+    };
+    warningEl.textContent = qualityWarnings[warning] || (warning.includes("oat") ? "Yulaf bulundu. Glutensiz üretim ve bulaş riski ayrıca doğrulanmalıdır." : `Uyarı: ${warning}`);
+    userResultEl.appendChild(warningEl);
+  }
+  const reviewEvidence = data.meta?.independentReview?.evidence;
+  if (Array.isArray(reviewEvidence) && reviewEvidence.length) {
+    const heading = document.createElement("p");
+    heading.textContent = "Görsel kontrolün bildirdiği, doğrulama gerektiren etiket metni:";
+    userResultEl.appendChild(heading);
+    const roles = { front: "Ön yüz", ingredients: "İçindekiler", extra: "Ek fotoğraf" };
+    for (const item of reviewEvidence.slice(0, 8)) {
+      if (!roles[item.role] || typeof item.quote !== "string") continue;
+      const quote = document.createElement("p");
+      quote.textContent = `${roles[item.role]}: ${item.quote}`;
+      userResultEl.appendChild(quote);
+    }
+  }
+  if (data.meta?.independentReview?.status === "resolved_by_evidence") {
+    const resolution = document.createElement("p");
+    resolution.textContent = "İlk okumalar arasındaki fark, fotoğraf ve etiket gerekçesi yeniden incelenerek giderildi. Etiket değerlendirmesi korundu; bu kontrol glutensiz olduğuna dair ek bir garanti değildir.";
+    userResultEl.appendChild(resolution);
+  }
+  document.getElementById("contributionSection").classList.remove("hidden");
 }
 
 function isInsufficientResult(data) {
@@ -321,7 +401,24 @@ function updatePhotoProgress() {
   for (const [label, file] of items) {
     const item = document.createElement("div");
     item.className = "progress-item";
-    item.textContent = `${file ? "Tamam" : "Bekliyor"} - ${label}`;
+    const text = document.createElement("span");
+    text.textContent = `${file ? "Tamam" : "Bekliyor"} - ${label}`;
+    item.appendChild(text);
+    const role = items.findIndex(entry => entry[0] === label);
+    const roleName = ["front", "ingredients", "extra"][role];
+    if (file) {
+      const preview = document.createElement("img");
+      preview.src = previewUrls.get(roleName);
+      preview.alt = `${label} önizleme`;
+      preview.style.cssText = "display:block;max-width:180px;max-height:160px";
+      item.appendChild(preview);
+      const replace = document.createElement("button");
+      replace.type = "button";
+      replace.textContent = "Değiştir";
+      replace.disabled = photoAnalysisInFlight;
+      replace.addEventListener("click", () => { PHOTO_STEPS[roleName].input.value = ""; PHOTO_STEPS[roleName].input.click(); });
+      item.appendChild(replace);
+    }
     photoProgress.appendChild(item);
   }
 }
@@ -352,6 +449,9 @@ function showPhotoStep(step) {
 }
 
 function startPhotoFlow() {
+  if (photoAnalysisInFlight) return;
+  for (const url of previewUrls.values()) URL.revokeObjectURL(url);
+  previewUrls.clear();
   photoFiles = {
     front: null,
     ingredients: null,
@@ -608,20 +708,21 @@ async function startCameraScan() {
 }
 
 async function scanProduct() {
-  if (productLookupInFlight) {
+  if (productLookupInFlight || photoAnalysisInFlight) {
     return;
   }
 
   const barcode = (barcodeInputEl.value || "").trim();
 
-  if (!barcode) {
+  if (!/^\d{8,14}$/.test(barcode)) {
     setUserMessage("Barkod gerekli", "Barkodu gir ya da barkodsuz fotoğraf akışını başlat.", "#fef3c7");
     showManualBarcode();
     return;
   }
 
-  await stopCameraScan();
+  hideRetry();
   setProductLookupBusy(true);
+  await stopCameraScan();
   setUserMessage(
     `Barkod okundu: ${barcode}`,
     "Ürün veritabanında aranıyor...",
@@ -639,8 +740,7 @@ async function scanProduct() {
   }, 3500);
 
   try {
-    const r = await fetch(`${getBaseUrl()}/scan/${barcode}`);
-    const data = await r.json();
+    const data = await requestJson(`/scan/${encodeURIComponent(barcode)}`, {}, 20000);
 
     clearProductLookupSlowTimer();
     setBackendResult(data);
@@ -653,7 +753,8 @@ async function scanProduct() {
     }
   } catch (e) {
     clearProductLookupSlowTimer();
-    setUserMessage("Backend hatası", e.message, "#fee2e2");
+    setUserMessage("Bağlantı hatası", e.message, "#fee2e2");
+    showRetry(scanProduct);
   } finally {
     clearProductLookupSlowTimer();
     setProductLookupBusy(false);
@@ -678,9 +779,11 @@ async function loadImageFromFile(file) {
 }
 
 async function prepareImageBlob(file, maxDim = 1280) {
+  if (!file.type.startsWith("image/") || file.size > 10 * 1024 * 1024) throw new Error("En fazla 10 MB boyutunda bir fotoğraf seçin.");
   const img = await loadImageFromFile(file);
   const w = img.naturalWidth;
   const h = img.naturalHeight;
+  if (w < 320 || h < 240 || w * h > 16000000) throw new Error("Fotoğrafın boyutu uygun değil. Net ve daha yakın bir etiket fotoğrafı seçin.");
   const scale = Math.min(1, maxDim / Math.max(w, h));
   const nw = Math.round(w * scale);
   const nh = Math.round(h * scale);
@@ -719,6 +822,11 @@ async function buildImagePayload(role, file) {
 }
 
 async function analyzePhotoFlow() {
+  if (photoAnalysisInFlight || productLookupInFlight) return;
+  if (!document.getElementById("externalProcessingConsent").checked) {
+    setUserMessage("İşleme onayı gerekli", "Fotoğraf ve etiket metninin işlenmesi hakkındaki açıklamayı okuyup onaylayın.", "#fef3c7");
+    return;
+  }
   if (!photoFiles.front) {
     showPhotoStep("front");
     return;
@@ -729,6 +837,10 @@ async function analyzePhotoFlow() {
     return;
   }
 
+  hideRetry();
+  photoAnalysisInFlight = true;
+  for (const button of photoSection.querySelectorAll("button")) button.disabled = true;
+  setProductLookupBusy(true);
   setUserMessage("Fotoğraflar analiz ediliyor", "Bu kısım biraz sürebilir.", "#f3f4f6");
 
   try {
@@ -741,16 +853,17 @@ async function analyzePhotoFlow() {
       images.push(await buildImagePayload("extra", photoFiles.extra));
     }
 
-    const r = await fetch(`${getBaseUrl()}/analyze-images`, {
+    const data = await requestJson("/analyze-images", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         barcode: (barcodeInputEl.value || "").trim() || undefined,
-        images
+        images,
+        externalProcessingConsent: true,
+        externalProcessingConsentVersion: "2026-11-03.3"
       })
-    });
+    }, 120000);
 
-    const data = await r.json();
     setBackendResult(data);
     renderUserResult(data);
 
@@ -760,13 +873,30 @@ async function analyzePhotoFlow() {
     }
   } catch (e) {
     setUserMessage("Analiz hatası", e.message, "#fee2e2");
+    showRetry(analyzePhotoFlow);
+  } finally {
+    photoAnalysisInFlight = false;
+    setProductLookupBusy(false);
+    for (const button of photoSection.querySelectorAll("button")) button.disabled = false;
+    updatePhotoProgress();
   }
 }
 
 function handlePhotoSelected(role, file) {
-  if (!file) return;
-
+  if (!file || photoAnalysisInFlight) return;
+  if (!file.type.startsWith("image/") || file.size > 10 * 1024 * 1024) {
+    setUserMessage("Fotoğraf uygun değil", "En fazla 10 MB boyutunda bir fotoğraf seçin.", "#fef3c7");
+    return;
+  }
+  if (previewUrls.has(role)) URL.revokeObjectURL(previewUrls.get(role));
+  previewUrls.set(role, URL.createObjectURL(file));
+  const replacing = !!photoFiles[role];
   photoFiles[role] = file;
+  updatePhotoProgress();
+  if (replacing) {
+    setUserMessage("Fotoğraf değiştirildi", "Güncel sonuç için seçili tüm fotoğraflarla yeniden analiz edin.", "#fef3c7");
+    return;
+  }
 
   if (role === "front") {
     showPhotoStep("ingredients");
@@ -778,7 +908,7 @@ function handlePhotoSelected(role, file) {
     return;
   }
 
-  analyzePhotoFlow();
+  showPhotoStep("extraChoice");
 }
 
 async function analyzeTextFromDebug() {
@@ -791,7 +921,7 @@ async function analyzeTextFromDebug() {
   }
 
   try {
-    const r = await fetch(`${getBaseUrl()}/analyze-label`, {
+    const data = await requestJson("/analyze-label", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -800,7 +930,6 @@ async function analyzeTextFromDebug() {
       })
     });
 
-    const data = await r.json();
     setBackendResult(data);
     renderUserResult(data);
   } catch (e) {
@@ -809,7 +938,7 @@ async function analyzeTextFromDebug() {
 }
 
 manualBarcodeBtn.addEventListener("click", showManualBarcode);
-noBarcodeBtn.addEventListener("click", startPhotoFlow);
+noBarcodeBtn.addEventListener("click", () => { if (!photoAnalysisInFlight && !productLookupInFlight) { barcodeInputEl.value = ""; startPhotoFlow(); } });
 scanProductBtn.addEventListener("click", scanProduct);
 barcodeInputEl.addEventListener("keydown", event => {
   if (event.key === "Enter") {
@@ -839,6 +968,8 @@ extraFileInput.addEventListener("change", () => {
 
 addExtraPhotoBtn.addEventListener("click", () => showPhotoStep("extra"));
 skipExtraPhotoBtn.addEventListener("click", analyzePhotoFlow);
+document.getElementById("reanalyzeBtn").addEventListener("click", analyzePhotoFlow);
+document.getElementById("retryBtn").addEventListener("click", () => { const retry = lastRetry; if (retry) retry(); });
 
 toggleDebugBtn.addEventListener("click", () => {
   const hidden = debugPanel.classList.contains("hidden");
@@ -847,3 +978,60 @@ toggleDebugBtn.addEventListener("click", () => {
 });
 
 analyzeTextBtn.addEventListener("click", analyzeTextFromDebug);
+
+// Tokens remain in memory and are cleared on reload/sign-out.
+document.getElementById("loginForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const button = document.getElementById("loginBtn");
+  button.disabled = true;
+  try {
+    const result = await requestJson("/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: document.getElementById("emailInput").value, password: document.getElementById("passwordInput").value }) });
+    accessToken = result.accessToken;
+    updateSession();
+  } catch (error) { document.getElementById("sessionStatus").textContent = error.message; }
+  finally { document.getElementById("passwordInput").value = ""; button.disabled = false; }
+});
+document.getElementById("logoutBtn").addEventListener("click", () => { accessToken = null; updateSession(); });
+document.getElementById("contributionForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const button = document.getElementById("submitContributionBtn");
+  if (!accessToken) { document.getElementById("contributionStatus").textContent = "Önce hesabınıza giriş yapın."; return; }
+  button.disabled = true;
+  try {
+    const result = await requestJson("/contributions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ barcode: barcodeInputEl.value.trim(), kind: document.getElementById("contributionKind").value, note: document.getElementById("contributionNote").value, retentionConsent: document.getElementById("retentionConsent").checked }) });
+    document.getElementById("contributionStatus").textContent = result.message;
+    if (document.getElementById("contributionKind").value === "decision_dispute") {
+      userResultEl.replaceChildren();
+      const pending = document.createElement("p");
+      pending.textContent = "Bu sonuç itiraz nedeniyle yeniden incelenecek. Önceki sonucu uygunluk kanıtı olarak kullanmayın.";
+      userResultEl.appendChild(pending);
+    }
+  } catch (error) { document.getElementById("contributionStatus").textContent = error.message; }
+  finally { button.disabled = false; }
+});
+if (window.EATSURE_CONFIG?.enableDebug !== true) document.querySelector(".debug-shell").classList.add("hidden");
+window.addEventListener("pagehide", event => { if (!event.persisted) for (const url of previewUrls.values()) URL.revokeObjectURL(url); });
+
+document.getElementById("loadContributionsBtn").addEventListener("click", async () => {
+  const list = document.getElementById("contributionHistory");
+  list.replaceChildren();
+  if (!accessToken) { list.textContent = "Önce hesabınıza giriş yapın."; return; }
+  try {
+    const data = await requestJson("/contributions/mine", { headers: { Authorization: `Bearer ${accessToken}` } });
+    for (const contribution of data.contributions) {
+      const item = document.createElement("li");
+      item.textContent = `${contribution.barcode}: ${contribution.status} — ${new Date(contribution.created_at).toLocaleDateString("tr-TR")}`;
+      const remove = document.createElement("button");
+      remove.textContent = "Açıklamamı sil";
+      remove.addEventListener("click", async () => {
+        remove.disabled = true;
+        try {
+          await requestJson(`/contributions/${encodeURIComponent(contribution.id)}/delete`, { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } });
+          item.textContent = `${contribution.barcode}: açıklama silindi. İnceleme işlem kaydı korunur.`;
+        } catch (error) { list.appendChild(document.createTextNode(error.message)); remove.disabled = false; }
+      });
+      item.appendChild(remove); list.appendChild(item);
+    }
+    if (!data.contributions.length) list.textContent = "Henüz katkı yok.";
+  } catch (error) { list.textContent = error.message; }
+});
