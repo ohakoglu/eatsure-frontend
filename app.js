@@ -346,10 +346,30 @@ function renderUserResult(data) {
     const qualityWarnings = {
       ocr_confidence_unavailable: "Metnin bazı bölümlerinde okuma güveni ölçülemiyor. Sonucu etiketle karşılaştırın.",
       ocr_confidence_low: "Bazı kelimeler güvenilir okunamadı. Etiketi net ve yakın çekerek yeniden deneyin.",
-      ingredients_photo_unverified: "İçindekiler fotoğrafındaki içerik listesi doğrulanamadı. Bu yüzü yeniden çekin."
+      ingredients_photo_unverified: "İçindekiler fotoğrafındaki içerik listesi doğrulanamadı. Bu yüzü yeniden çekin.",
+      independent_review_unavailable: "Ek görsel kontrol tamamlanamadı. Mevcut risk uyarılarını dikkate alın; daha sonra yeniden deneyin.",
+      independent_review_required: "Fotoğraf ve etiket değerlendirmesi arasındaki bulgular çözülemedi. Mevcut risk uyarılarını dikkate alın; üreticiden doğrulama veya uzman incelemesi gerekiyor."
     };
     warningEl.textContent = qualityWarnings[warning] || (warning.includes("oat") ? "Yulaf bulundu. Glutensiz üretim ve bulaş riski ayrıca doğrulanmalıdır." : `Uyarı: ${warning}`);
     userResultEl.appendChild(warningEl);
+  }
+  const reviewEvidence = data.meta?.independentReview?.evidence;
+  if (Array.isArray(reviewEvidence) && reviewEvidence.length) {
+    const heading = document.createElement("p");
+    heading.textContent = "Görsel kontrolün bildirdiği, doğrulama gerektiren etiket metni:";
+    userResultEl.appendChild(heading);
+    const roles = { front: "Ön yüz", ingredients: "İçindekiler", extra: "Ek fotoğraf" };
+    for (const item of reviewEvidence.slice(0, 8)) {
+      if (!roles[item.role] || typeof item.quote !== "string") continue;
+      const quote = document.createElement("p");
+      quote.textContent = `${roles[item.role]}: ${item.quote}`;
+      userResultEl.appendChild(quote);
+    }
+  }
+  if (data.meta?.independentReview?.status === "resolved_by_evidence") {
+    const resolution = document.createElement("p");
+    resolution.textContent = "İlk okumalar arasındaki fark, fotoğraf ve etiket gerekçesi yeniden incelenerek giderildi. Etiket değerlendirmesi korundu; bu kontrol glutensiz olduğuna dair ek bir garanti değildir.";
+    userResultEl.appendChild(resolution);
   }
   document.getElementById("contributionSection").classList.remove("hidden");
 }
@@ -804,7 +824,7 @@ async function buildImagePayload(role, file) {
 async function analyzePhotoFlow() {
   if (photoAnalysisInFlight || productLookupInFlight) return;
   if (!document.getElementById("externalProcessingConsent").checked) {
-    setUserMessage("İşleme onayı gerekli", "Fotoğrafların OCR sağlayıcısına iletilmesi için açıklamayı okuyup onaylayın.", "#fef3c7");
+    setUserMessage("İşleme onayı gerekli", "Fotoğraf ve etiket metninin işlenmesi hakkındaki açıklamayı okuyup onaylayın.", "#fef3c7");
     return;
   }
   if (!photoFiles.front) {
@@ -839,9 +859,10 @@ async function analyzePhotoFlow() {
       body: JSON.stringify({
         barcode: (barcodeInputEl.value || "").trim() || undefined,
         images,
-        externalProcessingConsent: true
+        externalProcessingConsent: true,
+        externalProcessingConsentVersion: "2026-11-03.3"
       })
-    });
+    }, 120000);
 
     setBackendResult(data);
     renderUserResult(data);

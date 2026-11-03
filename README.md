@@ -11,3 +11,7 @@ Debug UI is hidden unless `window.EATSURE_CONFIG.enableDebug === true`; producti
 Browser regressions run from the sibling backend using `npm test`, a local static server, Chromium and mocked API routes. No live API or OCR calls are used by those tests.
 
 OCR evidence-quality follow-up: weak transcription and unverified ingredient-panel warnings are shown as plain Turkish instructions, without technical codes or clinical safety percentages. This frontend follow-up accompanies the backend feature/ocr-evidence-quality-20261103 branch.
+
+Visual-review revision: consent version `2026-11-03.3` covers direct OpenAI processing of the same photo set and, on disagreement, one more request with photos, OCR and rule explanations. Gemini is no longer part of this path. Deploy this frontend before enabling `LLM_REVIEW_ENABLED` in the backend. Visual quotes are labelled as needing confirmation and rendered as text, never HTML. Unresolved checks preserve existing hazard warnings; grounded reconciliation explains that the original decision was retained without adding a clinical guarantee. Photo timeout remains 120 seconds.
+
+Not live enabled. Full backend/browser suite passed **121/121** on 4 November 2026 (Europe/Istanbul), including this revision's HTTP and Chromium tests. Syntax/whitespace checks passed. The earlier automatic approval usage block is resolved; application deployment still requires Supabase migration access, whose latest Management check returned HTTP 403.
