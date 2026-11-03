@@ -9,3 +9,5 @@ Existing Supabase accounts can log in through the API. Access tokens are held in
 Debug UI is hidden unless `window.EATSURE_CONFIG.enableDebug === true`; production API debug remains disabled regardless of this client option.
 
 Browser regressions run from the sibling backend using `npm test`, a local static server, Chromium and mocked API routes. No live API or OCR calls are used by those tests.
+
+OCR evidence-quality follow-up: weak transcription and unverified ingredient-panel warnings are shown as plain Turkish instructions, without technical codes or clinical safety percentages. This frontend follow-up accompanies the backend feature/ocr-evidence-quality-20261103 branch.

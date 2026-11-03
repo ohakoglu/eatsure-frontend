@@ -343,7 +343,12 @@ function renderUserResult(data) {
   userResultEl.appendChild(dateEl);
   for (const warning of data.decision?.warnings || []) {
     const warningEl = document.createElement("p");
-    warningEl.textContent = warning.includes("oat") ? "Yulaf bulundu. Glutensiz üretim ve bulaş riski ayrıca doğrulanmalıdır." : `Uyarı: ${warning}`;
+    const qualityWarnings = {
+      ocr_confidence_unavailable: "Metnin bazı bölümlerinde okuma güveni ölçülemiyor. Sonucu etiketle karşılaştırın.",
+      ocr_confidence_low: "Bazı kelimeler güvenilir okunamadı. Etiketi net ve yakın çekerek yeniden deneyin.",
+      ingredients_photo_unverified: "İçindekiler fotoğrafındaki içerik listesi doğrulanamadı. Bu yüzü yeniden çekin."
+    };
+    warningEl.textContent = qualityWarnings[warning] || (warning.includes("oat") ? "Yulaf bulundu. Glutensiz üretim ve bulaş riski ayrıca doğrulanmalıdır." : `Uyarı: ${warning}`);
     userResultEl.appendChild(warningEl);
   }
   document.getElementById("contributionSection").classList.remove("hidden");
