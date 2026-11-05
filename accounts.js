@@ -299,7 +299,7 @@ function handleAccountLocation() {
   if (recoveryParams.has('access_token') || recoveryParams.has('token_hash') || recoveryParams.has('error') || recoveryParams.has('error_code')) {
     history.replaceState(null, '', `${location.pathname}${location.search}#profil`);
     clearAccountSession();
-    if (['recovery', 'invite'].includes(recoveryParams.get('type')) && /^[a-f0-9]{64}$/i.test(recoveryParams.get('token_hash') || '')) {
+    if (['recovery', 'invite'].includes(recoveryParams.get('type')) && /^(?:[a-f0-9]{56}|[a-f0-9]{64})$/i.test(recoveryParams.get('token_hash') || '')) {
       activationToken = { tokenHash: recoveryParams.get('token_hash'), type: recoveryParams.get('type') };
       routeAccountPage();
     } else if (['recovery', 'invite'].includes(recoveryParams.get('type')) && recoveryParams.get('access_token')) {
