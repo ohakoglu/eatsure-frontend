@@ -354,6 +354,7 @@ function renderUserResult(data) {
       ocr_confidence_unavailable: "Metnin bazı bölümlerinde okuma güveni ölçülemiyor. Sonucu etiketle karşılaştırın.",
       ocr_confidence_low: "Bazı kelimeler güvenilir okunamadı. Etiketi net ve yakın çekerek yeniden deneyin.",
       ingredients_photo_unverified: "İçindekiler fotoğrafındaki içerik listesi doğrulanamadı. Bu yüzü yeniden çekin.",
+      language_context_uncertain: "Etiket ifadesinin neyi anlattığı veya beyanın kesinliği belirsiz. Net etiket ya da üretici doğrulaması gerekiyor.",
       independent_review_unavailable: "Ek görsel kontrol tamamlanamadı. Mevcut risk uyarılarını dikkate alın; daha sonra yeniden deneyin.",
       independent_review_required: "Fotoğraf ve etiket değerlendirmesi arasındaki bulgular çözülemedi. Mevcut risk uyarılarını dikkate alın; üreticiden doğrulama veya uzman incelemesi gerekiyor."
     };
