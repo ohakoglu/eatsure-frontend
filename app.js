@@ -145,10 +145,20 @@ function showRetry(action) {
 function hideRetry() { document.getElementById("retryBtn").classList.add("hidden"); lastRetry = null; }
 
 function setBackendResult(data) {
+  const trace = document.getElementById("decisionTrace");
   if (typeof data === "string") {
     backendResultEl.textContent = data;
+    trace.textContent = data;
   } else {
     backendResultEl.textContent = JSON.stringify(data, null, 2);
+    trace.textContent = data?.decision ? JSON.stringify({
+      "Veri kaynağı": data.meta?.source || (data.meta?.openFoodFactsAvailable ? "OpenFoodFacts" : null),
+      "Son karar ve gerekçe": data.decision,
+      "Kural motorunun bulguları ve kanıtları": data.analysis || null,
+      "Kararda kullanılan fotoğraf rolleri": data.meta?.rolePolicy || null,
+      "OCR ve etiket kanıtı kalitesi": data.meta?.evidenceQuality || null,
+      "Bağımsız görsel kontrol": data.meta?.independentReview || null
+    }, null, 2) : JSON.stringify(data, null, 2);
   }
 }
 
@@ -747,6 +757,7 @@ async function scanProduct() {
   }, 3500);
 
   try {
+    setBackendResult("Barkod analizi sürüyor; henüz yeni bir sonuç yok.");
     const data = await requestJson(`/scan/${encodeURIComponent(barcode)}`, {}, 20000);
 
     clearProductLookupSlowTimer();
@@ -760,6 +771,7 @@ async function scanProduct() {
     }
   } catch (e) {
     clearProductLookupSlowTimer();
+    setBackendResult({ error: e.message });
     setUserMessage("Bağlantı hatası", e.message, "#fee2e2");
     showRetry(scanProduct);
   } finally {
@@ -851,6 +863,7 @@ async function analyzePhotoFlow() {
   setUserMessage("Fotoğraflar analiz ediliyor", "Bu kısım biraz sürebilir.", "#f3f4f6");
 
   try {
+    setBackendResult("Fotoğraf analizi sürüyor; henüz yeni bir sonuç yok.");
     const images = [
       await buildImagePayload("front", photoFiles.front),
       await buildImagePayload("ingredients", photoFiles.ingredients)
@@ -879,6 +892,7 @@ async function analyzePhotoFlow() {
       ocrTextEl.value = JSON.stringify(extracted, null, 2);
     }
   } catch (e) {
+    setBackendResult({ error: e.message });
     setUserMessage("Analiz hatası", e.message, "#fee2e2");
     showRetry(analyzePhotoFlow);
   } finally {
@@ -981,7 +995,8 @@ document.getElementById("retryBtn").addEventListener("click", () => { const retr
 toggleDebugBtn.addEventListener("click", () => {
   const hidden = debugPanel.classList.contains("hidden");
   debugPanel.classList.toggle("hidden", !hidden);
-  toggleDebugBtn.textContent = hidden ? "Debug Gizle" : "Debug";
+  toggleDebugBtn.textContent = hidden ? "Debug / Karar ayrıntılarını gizle" : "Debug / Karar ayrıntıları";
+  toggleDebugBtn.setAttribute("aria-expanded", String(hidden));
 });
 
 analyzeTextBtn.addEventListener("click", analyzeTextFromDebug);
@@ -1003,5 +1018,6 @@ document.getElementById("contributionForm").addEventListener("submit", async eve
   } catch (error) { document.getElementById("contributionStatus").textContent = error.message; }
   finally { button.disabled = false; }
 });
-if (window.EATSURE_CONFIG?.enableDebug !== true) document.querySelector(".debug-shell").classList.add("hidden");
+// Keep diagnostics available during the pilot; disable explicitly at public launch.
+if (window.EATSURE_CONFIG?.enableDebug === false) document.querySelector(".debug-shell").classList.add("hidden");
 window.addEventListener("pagehide", event => { if (!event.persisted) for (const url of previewUrls.values()) URL.revokeObjectURL(url); });

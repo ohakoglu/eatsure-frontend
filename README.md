@@ -18,7 +18,7 @@ Barcode lookup and photo analysis retain two required photos, optional extra pho
 
 Consent `2026-11-03.3` covers direct OpenAI visual evaluation and at most one recheck with photos, OCR and rule explanations. Quotes are identified as model-reported evidence requiring confirmation. Unresolved disagreements preserve existing hazards. A resolved difference retains the original decision without adding a clinical guarantee. Images and model outputs from public photo analysis are not persisted by the application.
 
-Debug UI stays hidden unless `window.EATSURE_CONFIG.enableDebug === true`; production API debug remains disabled.
+During the pilot, the Debug / Karar ayrıntıları button is visible and its panel starts collapsed. It shows the returned decision/evidence, OCR output, visual-review metadata and complete API response without another analysis request. Keep it available until the user explicitly requests the general-public launch. At that point it can be hidden using `window.EATSURE_CONFIG.enableDebug = false`. Production-only internal API debug remains disabled; this panel uses the existing public analysis response.
 
 ## Verification
 

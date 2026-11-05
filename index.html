@@ -119,11 +119,16 @@
     <p id="contributionStatus" role="status" aria-live="polite"></p>
   </section>
   <section class="debug-shell">
-    <button id="toggleDebugBtn" class="btn btn-secondary btn-small">Debug</button>
+    <button id="toggleDebugBtn" class="btn btn-secondary btn-small" aria-expanded="false" aria-controls="debugPanel">Debug / Karar ayrıntıları</button>
 
     <section id="debugPanel" class="hidden">
       <section class="card">
-        <h2>OCR / AI Extraction</h2>
+        <h2>Kararın dayanakları</h2>
+        <p class="muted small">Son analizin API tarafından döndürülen gerekçesi, eşleşen kanıtlar ve varsa görsel kontrol sonucu. Bu paneli açmak yeni bir analiz başlatmaz.</p>
+        <pre id="decisionTrace" class="pre">Henüz analiz yapılmadı.</pre>
+      </section>
+      <section class="card">
+        <h2>OCR / Etiket metni</h2>
         <textarea
           id="ocrText"
           class="textarea"
@@ -134,7 +139,7 @@
       </section>
 
       <section class="card">
-        <h2>Backend Sonucu</h2>
+        <h2>Tam sunucu yanıtı</h2>
         <pre id="backendResult" class="pre">Henüz sonuç yok.</pre>
       </section>
     </section>
