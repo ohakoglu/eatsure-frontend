@@ -25,8 +25,8 @@ function currentAccountPage() { return location.hash === '#admin' ? 'admin' : lo
 
 function updateSession() {
   const signedIn = Boolean(accessToken);
-  accountEl('sessionStatus').textContent = signedIn ? 'Oturum açık.' : 'Mevcut EatSure hesabınla giriş yap.';
-  accountEl('loginForm').classList.toggle('hidden', signedIn);
+  accountEl('sessionStatus').textContent = activationToken ? 'İlk giriş için aşağıdaki bağlantıyı doğrula ve parolanı belirle.' : signedIn ? 'Oturum açık.' : 'Mevcut EatSure hesabınla giriş yap.';
+  accountEl('loginForm').classList.toggle('hidden', signedIn || Boolean(activationToken));
   accountEl('logoutBtn').classList.toggle('hidden', !signedIn);
   accountEl('profileContent').classList.toggle('hidden', !signedIn || !accountProfile);
   accountEl('reloadProfileBtn').classList.toggle('hidden', !signedIn || Boolean(accountProfile));
