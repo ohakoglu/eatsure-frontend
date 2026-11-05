@@ -23,6 +23,12 @@
     </h1>
   </section>
 
+  <nav class="page-nav" aria-label="Ana menü">
+    <a href="#tara" data-page="scan">Ürün tara</a>
+    <a href="#profil" data-page="profile">Profilim</a>
+    <a href="#admin" data-page="admin">Yönetim</a>
+  </nav>
+  <div id="scanPage" class="page-view">
   <section class="card" id="startSection">
     <h2>Başlayalım</h2>
     <p class="muted small">Bir yol seç. Gerekirse sonraki adımı EatSure açacak.</p>
@@ -100,21 +106,10 @@
     <div id="userResult" class="user-result"></div>
   </section>
 
-  <section class="card">
-    <h2>Hesap</h2>
-    <p id="sessionStatus">Katkı göndermek için mevcut hesabınızla oturum açın.</p>
-    <form id="loginForm">
-      <label>E-posta <input id="emailInput" type="email" autocomplete="username" required /></label>
-      <label>Parola <input id="passwordInput" type="password" autocomplete="current-password" required /></label>
-      <button id="loginBtn" type="submit" class="btn btn-secondary">Giriş yap</button>
-    </form>
-    <button id="loadContributionsBtn" class="btn btn-secondary">Katkı geçmişim</button>
-    <ul id="contributionHistory"></ul>
-    <button id="logoutBtn" class="btn btn-secondary hidden">Oturumu kapat</button>
-  </section>
   <section id="contributionSection" class="card hidden">
     <h2>Bilgi düzeltme veya sonuca itiraz</h2>
     <p>Katkılar incelemeye alınır; ana ürün kaydını doğrudan değiştirmez. Barkod gereklidir.</p>
+    <a class="text-link" href="#profil">Hesabım ve katkı geçmişim</a>
     <form id="contributionForm">
       <label>Katkı türü <select id="contributionKind"><option value="decision_dispute">Sonuca itiraz</option><option value="label_correction">Etiket bilgisi düzeltme</option><option value="new_product">Yeni ürün bilgisi</option></select></label>
       <label>Açıklama <textarea id="contributionNote" minlength="10" maxlength="5000" required></textarea></label>
@@ -145,6 +140,90 @@
     </section>
   </section>
 
+  </div>
+
+  <section id="profilePage" class="page-view hidden" aria-labelledby="profileHeading">
+    <header class="page-heading"><p class="eyebrow">HESABIM</p><h2 id="profileHeading" tabindex="-1">Profilim</h2><p class="muted">Hesap bilgilerin ve EatSure’a gönderdiğin katkılar.</p></header>
+    <section class="card">
+      <p id="sessionStatus" role="status" aria-live="polite">Mevcut EatSure hesabınla giriş yap.</p>
+      <form id="loginForm" class="account-form">
+        <label for="emailInput">E-posta</label><input class="input" id="emailInput" type="email" autocomplete="username" required maxlength="254" />
+        <label for="passwordInput">Parola</label><input class="input" id="passwordInput" type="password" autocomplete="current-password" required maxlength="1024" />
+        <button id="loginBtn" type="submit" class="btn btn-primary">Giriş yap</button>
+        <button id="sendRecoveryBtn" type="button" class="btn btn-secondary hidden">Parola oluştur / sıfırla</button>
+        <p id="recoveryHelp" class="muted small">İlk girişte hesabın için iletilen özel parola belirleme bağlantısını kullan. Yeni bağlantı için hesap yöneticinle iletişime geç.</p>
+        <p class="muted small">Bu ekran mevcut hesaplar içindir. Oturum bilgilerin bu tarayıcı sekmesinde tutulur; sayfayı yenilediğinde yeniden giriş yapman gerekir.</p>
+      </form>
+      <button id="logoutBtn" class="btn btn-secondary hidden">Oturumu kapat</button>
+    </section>
+    <section id="activationCard" class="card hidden">
+      <h3>Hesabını aç</h3><p>Bu tek kullanımlık bağlantıyı doğrulayarak parolanı belirleyebilirsin.</p>
+      <button id="activateAccountBtn" class="btn btn-primary" type="button">Bağlantıyı doğrula ve devam et</button>
+      <p id="activationStatus" class="feedback" role="status" aria-live="polite"></p>
+    </section>
+    <section id="passwordSetup" class="card hidden">
+      <h3>Parolanı belirle</h3>
+      <form id="passwordSetupForm" class="account-form">
+        <label for="newPasswordInput">Yeni parola (en az 12 karakter)</label><input id="newPasswordInput" class="input" type="password" autocomplete="new-password" minlength="12" maxlength="128" required />
+        <label for="confirmPasswordInput">Yeni parola tekrar</label><input id="confirmPasswordInput" class="input" type="password" autocomplete="new-password" minlength="12" maxlength="128" required />
+        <button id="savePasswordBtn" class="btn btn-primary" type="submit">Parolayı kaydet</button>
+      </form>
+      <p id="passwordStatus" class="feedback" role="status" aria-live="polite"></p>
+    </section>
+    <div id="profileContent" class="page-view hidden">
+      <section class="card">
+        <div class="section-heading"><h3>Hesap bilgileri</h3><span id="profileRole" class="badge"></span></div>
+        <dl class="profile-details"><dt>E-posta</dt><dd id="profileEmail"></dd><dt>Üyelik tarihi</dt><dd id="profileCreated"></dd><dt>E-posta doğrulaması</dt><dd id="profileVerified"></dd></dl>
+        <form id="profileForm" class="account-form"><label for="displayNameInput">Görünen ad</label><input id="displayNameInput" class="input" autocomplete="nickname" maxlength="80" required /><button id="saveProfileBtn" class="btn btn-primary" type="submit">Değişiklikleri kaydet</button></form>
+        <p id="profileStatus" class="feedback" role="status" aria-live="polite"></p>
+      </section>
+      <section class="card">
+        <div class="section-heading"><h3>Katkı geçmişim</h3><button id="loadContributionsBtn" class="btn btn-secondary btn-small">Yenile</button></div>
+        <p class="muted small">Son 100 katkı gösterilir. Açıklamanı geri çektiğinde kişisel ilişki kaldırılır; inceleme işlem kaydı korunur.</p>
+        <ul id="contributionHistory" class="record-list" aria-live="polite"></ul>
+      </section>
+    </div>
+    <button id="reloadProfileBtn" class="btn btn-secondary hidden">Profili yeniden yükle</button>
+  </section>
+
+  <section id="adminPage" class="page-view hidden" aria-labelledby="adminHeading">
+    <header class="page-heading"><p class="eyebrow">EATSURE YÖNETİM</p><h2 id="adminHeading" tabindex="-1">İnceleme merkezi</h2><p class="muted">Ürün katkılarını değerlendir, doğrulanmış etiket bilgilerini yayınla.</p></header>
+    <section id="adminGate" class="card"><p id="adminGateMessage">Yönetim alanına erişmek için yetkili hesabınla giriş yap.</p><a class="text-link" href="#profil">Profil ve giriş sayfasına git</a></section>
+    <div id="adminContent" class="page-view hidden">
+      <section class="card">
+        <div class="section-heading"><h3>Ortak günlük kullanım</h3><button id="refreshAdminBtn" class="btn btn-secondary btn-small">Yenile</button></div>
+        <div id="budgetSummary" class="stats-grid" aria-live="polite"></div>
+        <p class="muted small">Tüm kullanıcıların OCR ve görsel kontrol çağrıları ortaktır. Tutarlar bütçe rezervasyonudur; fatura tutarı değildir. Kota Türkiye saatiyle 03.00’te yenilenir.</p>
+      </section>
+      <section class="card">
+        <div class="section-heading"><h3>İnceleme kuyruğu</h3><span id="queueCount" class="badge"></span></div>
+        <label class="label" for="queueSearch">Barkod veya açıklamada ara</label><input id="queueSearch" class="input" type="search" placeholder="Barkod ya da sözcük" />
+        <label class="label" for="queueFilter">Durum</label><select id="queueFilter" class="input"><option value="all">Tüm açık katkılar</option><option value="pending">İnceleme bekleyen</option><option value="needs_more_info">Ek bilgi bekleyen</option></select>
+        <p id="adminStatus" class="feedback" role="status" aria-live="polite"></p>
+        <ul id="reviewQueue" class="record-list"></ul>
+        <p class="muted small">Süresi dolmamış en eski 100 açık katkı gösterilir.</p>
+      </section>
+      <section id="reviewDetail" class="card hidden" aria-labelledby="reviewHeading">
+        <div class="section-heading"><h3 id="reviewHeading" tabindex="-1">Katkıyı değerlendir</h3><button id="closeReviewBtn" class="btn btn-secondary btn-small">Kapat</button></div>
+        <p id="reviewBarcode" class="record-title"></p><p id="reviewNote" class="preserve-lines"></p>
+        <form id="reviewForm" class="account-form">
+          <label for="reviewDecision">İşlem</label><select id="reviewDecision" class="input"><option value="needs_more_info">Ek bilgi iste</option><option value="rejected">Reddet</option><option value="approved">Doğrulanmış etiketi onayla</option></select>
+          <label for="reviewReason">İnceleme notu</label><textarea id="reviewReason" class="input" rows="3" minlength="3" maxlength="2000" required></textarea>
+          <fieldset id="verifiedFields" class="hidden" disabled>
+            <legend>Doğrulanmış etiket</legend>
+            <p class="muted small">Onay, yeni bir ürün sürümü yayınlar. Karar etiket metninden yeniden hesaplanır.</p>
+            <label for="verifiedName">Ürün adı</label><input id="verifiedName" class="input" maxlength="200" required />
+            <label for="verifiedBrand">Marka</label><input id="verifiedBrand" class="input" maxlength="200" required />
+            <label for="verifiedSource">Doğrulama kaynağı bağlantısı (https://)</label><input id="verifiedSource" class="input" type="url" pattern="https://.*" maxlength="2000" required />
+            <label for="verifiedLabel">Etiketteki metin</label><textarea id="verifiedLabel" class="input" rows="7" minlength="10" maxlength="15000" placeholder="İçindekiler: …&#10;Alerjenler: …&#10;Eser miktarda: …" required></textarea>
+            <label class="check-label"><input id="evidenceChecked" type="checkbox" required /> Etiket metnini ve kaynağını bağımsız olarak doğruladım; bu bilgilerin ürün kaydına yayınlanmasını onaylıyorum.</label>
+          </fieldset>
+          <button id="submitReviewBtn" class="btn btn-primary" type="submit">İncelemeyi kaydet</button>
+          <p id="reviewStatus" class="feedback" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+    </div>
+  </section>
 </main>
 
 <script
@@ -153,6 +232,7 @@ onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/@zxing/browser
 </script>
 
 <script src="app.js"></script>
+<script src="accounts.js"></script>
 
 </body>
 </html>

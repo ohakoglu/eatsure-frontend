@@ -35,6 +35,7 @@ const analyzeTextBtn = document.getElementById("analyzeTextBtn");
 let barcodeCodeReader = null;
 let barcodeScanControls = null;
 let cameraRunning = false;
+let cameraGeneration = 0;
 let barcodeDetected = false;
 let productLookupInFlight = false;
 let photoAnalysisInFlight = false;
@@ -127,8 +128,9 @@ async function requestJson(path, options = {}, timeoutMs = 70000) {
       try { data = await response.json(); } catch { throw new Error("Sunucu yanıtı okunamadı. Lütfen tekrar deneyin."); }
     }
     if (!response.ok) {
-      if (response.status === 401) { accessToken = null; updateSession(); }
-      throw new Error(data.message || (response.status === 429 ? "Çok fazla istek. Biraz sonra tekrar deneyin." : "İstek tamamlanamadı. Lütfen tekrar deneyin."));
+      if (response.status === 401 && options.headers?.Authorization === `Bearer ${accessToken}`) { clearAccountSession(); }
+      const failure = new Error(data.message || (response.status === 429 ? "Çok fazla istek. Biraz sonra tekrar deneyin." : "İstek tamamlanamadı. Lütfen tekrar deneyin."));
+      failure.status = response.status; failure.code = data.error; throw failure;
     }
     return data;
   } catch (error) {
@@ -141,11 +143,6 @@ function showRetry(action) {
   document.getElementById("retryBtn").classList.remove("hidden");
 }
 function hideRetry() { document.getElementById("retryBtn").classList.add("hidden"); lastRetry = null; }
-function updateSession() {
-  document.getElementById("sessionStatus").textContent = accessToken ? "Oturum açık. Katkı ve itiraz gönderebilirsiniz." : "Katkı göndermek için mevcut hesabınızla oturum açın.";
-  document.getElementById("logoutBtn").classList.toggle("hidden", !accessToken);
-  if (!accessToken) document.getElementById("contributionHistory").replaceChildren();
-}
 
 function setBackendResult(data) {
   if (typeof data === "string") {
@@ -612,6 +609,7 @@ function stopVideoTracks() {
 }
 
 async function stopCameraScan() {
+  cameraGeneration++;
   if (!cameraRunning && !barcodeCodeReader && !barcodeScanControls) {
     return;
   }
@@ -668,6 +666,8 @@ async function startCameraScan() {
     return;
   }
 
+  const generation = ++cameraGeneration;
+  let videoEl;
   try {
     cameraRunning = true;
     barcodeDetected = false;
@@ -675,10 +675,10 @@ async function startCameraScan() {
     setUserMessage("Barkod taranıyor", "Barkodu net ve iyi ışıkta kameraya göster.", "#f3f4f6");
 
     barcodeCodeReader = createZxingReader(zxing);
-    const videoEl = createBarcodeVideoElement();
+    videoEl = createBarcodeVideoElement();
 
     const callback = async (result, error) => {
-      if (barcodeDetected) return;
+      if (barcodeDetected || generation !== cameraGeneration) return;
 
       if (result) {
         const rawText =
@@ -695,12 +695,19 @@ async function startCameraScan() {
       }
     };
 
-    barcodeScanControls = await startZxingWithFallback(
+    const controls = await startZxingWithFallback(
       barcodeCodeReader,
       videoEl,
       callback
     );
+    if (generation !== cameraGeneration) {
+      controls?.stop?.();
+      videoEl.srcObject?.getTracks().forEach(track => track.stop());
+      return;
+    }
+    barcodeScanControls = controls;
   } catch (e) {
+    if (generation !== cameraGeneration) { videoEl?.srcObject?.getTracks().forEach(track => track.stop()); return; }
     console.error("Kamera barkod tarama hatası:", e);
     await stopCameraScan();
     setUserMessage("Kamera açılamadı", e.message || "Barkod okuyucu başlatılamadı.", "#fee2e2");
@@ -979,26 +986,13 @@ toggleDebugBtn.addEventListener("click", () => {
 
 analyzeTextBtn.addEventListener("click", analyzeTextFromDebug);
 
-// Tokens remain in memory and are cleared on reload/sign-out.
-document.getElementById("loginForm").addEventListener("submit", async event => {
-  event.preventDefault();
-  const button = document.getElementById("loginBtn");
-  button.disabled = true;
-  try {
-    const result = await requestJson("/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: document.getElementById("emailInput").value, password: document.getElementById("passwordInput").value }) });
-    accessToken = result.accessToken;
-    updateSession();
-  } catch (error) { document.getElementById("sessionStatus").textContent = error.message; }
-  finally { document.getElementById("passwordInput").value = ""; button.disabled = false; }
-});
-document.getElementById("logoutBtn").addEventListener("click", () => { accessToken = null; updateSession(); });
 document.getElementById("contributionForm").addEventListener("submit", async event => {
   event.preventDefault();
   const button = document.getElementById("submitContributionBtn");
   if (!accessToken) { document.getElementById("contributionStatus").textContent = "Önce hesabınıza giriş yapın."; return; }
   button.disabled = true;
   try {
-    const result = await requestJson("/contributions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ barcode: barcodeInputEl.value.trim(), kind: document.getElementById("contributionKind").value, note: document.getElementById("contributionNote").value, retentionConsent: document.getElementById("retentionConsent").checked }) });
+    const result = await accountRequest("/contributions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ barcode: barcodeInputEl.value.trim(), kind: document.getElementById("contributionKind").value, note: document.getElementById("contributionNote").value, retentionConsent: document.getElementById("retentionConsent").checked }) });
     document.getElementById("contributionStatus").textContent = result.message;
     if (document.getElementById("contributionKind").value === "decision_dispute") {
       userResultEl.replaceChildren();
@@ -1011,27 +1005,3 @@ document.getElementById("contributionForm").addEventListener("submit", async eve
 });
 if (window.EATSURE_CONFIG?.enableDebug !== true) document.querySelector(".debug-shell").classList.add("hidden");
 window.addEventListener("pagehide", event => { if (!event.persisted) for (const url of previewUrls.values()) URL.revokeObjectURL(url); });
-
-document.getElementById("loadContributionsBtn").addEventListener("click", async () => {
-  const list = document.getElementById("contributionHistory");
-  list.replaceChildren();
-  if (!accessToken) { list.textContent = "Önce hesabınıza giriş yapın."; return; }
-  try {
-    const data = await requestJson("/contributions/mine", { headers: { Authorization: `Bearer ${accessToken}` } });
-    for (const contribution of data.contributions) {
-      const item = document.createElement("li");
-      item.textContent = `${contribution.barcode}: ${contribution.status} — ${new Date(contribution.created_at).toLocaleDateString("tr-TR")}`;
-      const remove = document.createElement("button");
-      remove.textContent = "Açıklamamı sil";
-      remove.addEventListener("click", async () => {
-        remove.disabled = true;
-        try {
-          await requestJson(`/contributions/${encodeURIComponent(contribution.id)}/delete`, { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } });
-          item.textContent = `${contribution.barcode}: açıklama silindi. İnceleme işlem kaydı korunur.`;
-        } catch (error) { list.appendChild(document.createTextNode(error.message)); remove.disabled = false; }
-      });
-      item.appendChild(remove); list.appendChild(item);
-    }
-    if (!data.contributions.length) list.textContent = "Henüz katkı yok.";
-  } catch (error) { list.textContent = error.message; }
-});
