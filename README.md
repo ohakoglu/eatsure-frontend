@@ -1,17 +1,25 @@
 # EatSure frontend
 
-Static mobile frontend. Serve with a static server; configure the API origin before `app.js` via `window.EATSURE_CONFIG = { backendBase: "https://your-api.example" }`. The backend must explicitly allow the frontend origin. The historical Render URL remains the fallback; no deployment was made.
+Static mobile application at https://ohakoglu.github.io/eatsure-frontend/. The three views are `#tara` (scanner), `#profil` (account) and `#admin` (review). Hash navigation works on GitHub Pages, preserves an in-progress analysis, and stops the scanner camera when leaving that view.
 
-The UI supports barcode lookup, two required label photos and an optional extra photo, previews/replacement, explicit external processing consent, full reanalysis, HTTP error/retry handling, timeout and duplicate-request protection. Evidence, source and evaluation date appear with results. Cross-contamination is presented as “Çölyak için uygun değil”, rather than falsely asserting measured gluten content.
+Configure the API origin before `app.js` using `window.EATSURE_CONFIG = { backendBase: "https://your-api.example" }`; the production Render API is the fallback. The backend must allow the frontend origin. Load `accounts.js` after `app.js`.
 
-Existing Supabase accounts can log in through the API. Access tokens are held in memory and cleared on reload/sign-out; no service-role key belongs in this repository. Contribution/appeal notes are pending review, with history and withdrawal. Configure the backend migration and scheduled retention job before enabling contributions publicly. No self-service signup or reviewer management UI is claimed.
+## Account and review views
 
-Debug UI is hidden unless `window.EATSURE_CONFIG.enableDebug === true`; production API debug remains disabled regardless of this client option.
+The profile shows verified account information and role, edits the display name, and lists the last 100 own contributions with reviewer notes and withdrawal. Reviewers/admins get a searchable queue, further-information/rejection actions, verified-label publication and a read-only daily shared-budget summary. Approval requires independently checked evidence and the backend recalculates the decision. No user-role assignment, API keys or budget-changing controls exist in the client.
 
-Browser regressions run from the sibling backend using `npm test`, a local static server, Chromium and mocked API routes. No live API or OCR calls are used by those tests.
+Tokens stay in memory, not browser storage. Refresh/sign-out clears the application session. Session expiry, revoked access and late responses cannot leave protected information in the page. All user/model/reviewer content is rendered as text. Role labels are not an authorization boundary; the API verifies every privileged operation.
 
-OCR evidence-quality follow-up: weak transcription and unverified ingredient-panel warnings are shown as plain Turkish instructions, without technical codes or clinical safety percentages. This frontend follow-up accompanies the backend feature/ocr-evidence-quality-20261103 branch.
+New accounts use a private single-use activation link supplied by an authorized operator. The proof is removed from the address and verified after the owner presses the activation button; the owner then chooses a password. No setup links belong in this repository. Email recovery is shown only when the backend reports a verified configuration. Production has no custom SMTP and keeps this action disabled. See backend `docs/ACCOUNTS_2026-11-05.md` for provisioning and security details. There is no public self-service signup.
 
-Visual-review revision: consent version `2026-11-03.3` covers direct OpenAI processing of the same photo set and, on disagreement, one more request with photos, OCR and rule explanations. Gemini is no longer part of this path. Deploy this frontend before enabling `LLM_REVIEW_ENABLED` in the backend. Visual quotes are labelled as needing confirmation and rendered as text, never HTML. Unresolved checks preserve existing hazard warnings; grounded reconciliation explains that the original decision was retained without adding a clinical guarantee. Photo timeout remains 120 seconds.
+## Product analysis
 
-Not live enabled. Full backend/browser suite passed **121/121** on 4 November 2026 (Europe/Istanbul), including this revision's HTTP and Chromium tests. Syntax/whitespace checks passed. The earlier automatic approval usage block is resolved; application deployment still requires Supabase migration access, whose latest Management check returned HTTP 403.
+Barcode lookup and photo analysis retain two required photos, optional extra photo, previews/replacement, explicit external-processing consent, retry/timeout handling, and duplicate-request guards. Evidence and source dates are visible. Weak OCR and unverified panels produce readable conservative warnings.
+
+Consent `2026-11-03.3` covers direct OpenAI visual evaluation and at most one recheck with photos, OCR and rule explanations. Quotes are identified as model-reported evidence requiring confirmation. Unresolved disagreements preserve existing hazards. A resolved difference retains the original decision without adding a clinical guarantee. Images and model outputs from public photo analysis are not persisted by the application.
+
+Debug UI stays hidden unless `window.EATSURE_CONFIG.enableDebug === true`; production API debug remains disabled.
+
+## Verification
+
+Run `npm test` from the sibling backend. Browser tests use local static serving, Chromium and mocked endpoints; no paid OCR/LLM calls or outgoing email. They cover scanner regression, mobile profile/admin layout, authorization, editing, withdrawal, moderation, password setup, stale response protection and camera cleanup.
