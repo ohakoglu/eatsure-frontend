@@ -159,7 +159,13 @@ function setBackendResult(data) {
       "Kural motorunun bulguları ve kanıtları": data.analysis || null,
       "Kararda kullanılan fotoğraf rolleri": data.meta?.rolePolicy || null,
       "OCR ve etiket kanıtı kalitesi": data.meta?.evidenceQuality || null,
-      "Bağımsız görsel kontrol": data.meta?.independentReview || null
+      "Bağımsız görsel kontrol": data.meta?.independentReview || null,
+      "Açıklanabilir API karar izi": data.debug || null,
+      "OFF topluluk etiketleri": data.analysis?.communityClaims || null,
+      "Kalite ve okunabilirlik": data.debug?.evidenceQuality || data.meta?.evidenceQuality || null,
+      "Metin bölüm sınırları": data.debug?.parsedSections?.diagnostics || null,
+      "Sertifika kaynağı ve kapsam kontrolü": data.debug?.certificateCheck || null,
+      "Sonucu belirleyen bulgular": data.debug?.decisionBasis || null
     }, null, 2) : JSON.stringify(data, null, 2);
   }
 }
