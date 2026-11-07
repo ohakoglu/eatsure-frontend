@@ -165,7 +165,13 @@ function setBackendResult(data) {
       "Kalite ve okunabilirlik": data.debug?.evidenceQuality || data.meta?.evidenceQuality || null,
       "Metin bölüm sınırları": data.debug?.parsedSections?.diagnostics || null,
       "Sertifika kaynağı ve kapsam kontrolü": data.debug?.certificateCheck || null,
-      "Sonucu belirleyen bulgular": data.debug?.decisionBasis || null
+      "Sonucu belirleyen bulgular": data.debug?.decisionBasis || null,
+      "Dil kapsamı ve yorumlanan alanlar": data.analysis?.language || null,
+      "Barkod kimliği kontrolü": data.meta?.barcodeIdentity || data.debug?.barcodeIdentity || null,
+      "Resmî sertifika kaydı": data.meta?.certificationsApplied || null,
+      "Sertifika kontrol durumu": data.meta?.certificateCheck || null,
+      "Kullanılan kural sürümleri": data.meta?.ruleVersions || data.debug?.ruleVersions || null,
+      "Bölüm ayrıştırma tanısı": data.parsedSections?.diagnostics || data.debug?.parsedSections?.diagnostics || null
     }, null, 2) : JSON.stringify(data, null, 2);
   }
 }
