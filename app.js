@@ -130,6 +130,7 @@ async function requestJson(path, options = {}, timeoutMs = 70000) {
     if (!response.ok) {
       if (response.status === 401 && options.headers?.Authorization === `Bearer ${accessToken}`) { clearAccountSession(); }
       const failure = new Error(data.message || (response.status === 429 ? "Çok fazla istek. Biraz sonra tekrar deneyin." : "İstek tamamlanamadı. Lütfen tekrar deneyin."));
+      if (data.error === "SOURCE_UNAVAILABLE") failure.payload = data;
       failure.status = response.status; failure.code = data.error; throw failure;
     }
     return data;
@@ -153,6 +154,7 @@ function setBackendResult(data) {
     backendResultEl.textContent = JSON.stringify(data, null, 2);
     trace.textContent = data?.decision ? JSON.stringify({
       "Veri kaynağı": data.meta?.source || (data.meta?.openFoodFactsAvailable ? "OpenFoodFacts" : null),
+      "Ürün kaynağı sorgusu ve tekrarlar": data.meta?.sourceLookup || null,
       "Son karar ve gerekçe": data.decision,
       "Kural motorunun bulguları ve kanıtları": data.analysis || null,
       "Kararda kullanılan fotoğraf rolleri": data.meta?.rolePolicy || null,
@@ -299,7 +301,9 @@ function renderUserResult(data) {
   resultSection.classList.remove("hidden");
 
   const level = data?.decision?.level || "insufficient_data";
-  const ui = LEVEL_UI[level] || LEVEL_UI.insufficient_data;
+  const ui = data.decision?.warnings?.includes("product_not_found")
+    ? { title: "Ürün bulunamadı", color: "#f3f4f6" }
+    : LEVEL_UI[level] || LEVEL_UI.insufficient_data;
   const reason = data?.decision?.reason || "";
   const productIdentity = getProductIdentity(data);
 
@@ -351,6 +355,8 @@ function renderUserResult(data) {
   for (const warning of data.decision?.warnings || []) {
     const warningEl = document.createElement("p");
     const qualityWarnings = {
+      product_not_found: "Ürün kaynağında bu barkod için kayıt yok. Etiket fotoğraflarıyla devam edebilirsiniz.",
+      source_unavailable_using_previous: "Güncel ürün kaynağı doğrulanamadı. Önceki risk uyarısı korunuyor; yeniden doğrulama gerekiyor.",
       ocr_confidence_unavailable: "Metnin bazı bölümlerinde okuma güveni ölçülemiyor. Sonucu etiketle karşılaştırın.",
       ocr_confidence_low: "Bazı kelimeler güvenilir okunamadı. Etiketi net ve yakın çekerek yeniden deneyin.",
       ingredients_photo_unverified: "İçindekiler fotoğrafındaki içerik listesi doğrulanamadı. Bu yüzü yeniden çekin.",
@@ -759,7 +765,7 @@ async function scanProduct() {
 
   try {
     setBackendResult("Barkod analizi sürüyor; henüz yeni bir sonuç yok.");
-    const data = await requestJson(`/scan/${encodeURIComponent(barcode)}`, {}, 20000);
+    const data = await requestJson(`/scan/${encodeURIComponent(barcode)}`, {}, 35000);
 
     clearProductLookupSlowTimer();
     setBackendResult(data);
@@ -767,13 +773,21 @@ async function scanProduct() {
 
     if (isInsufficientResult(data)) {
       startPhotoFlow();
+      setUserMessage(
+        data.decision?.warnings?.includes("product_not_found") ? "Ürün bulunamadı" : "Ürün bilgisi yetersiz",
+        data.decision?.reason || "Etiket fotoğraflarıyla devam edebilirsiniz.",
+        "#f3f4f6"
+      );
     } else {
       photoSection.classList.add("hidden");
     }
   } catch (e) {
     clearProductLookupSlowTimer();
-    setBackendResult({ error: e.message });
-    setUserMessage("Bağlantı hatası", e.message, "#fee2e2");
+    setBackendResult(e.payload || { error: e.message });
+    const waitSeconds = e.payload?.meta?.sourceLookup?.retryAfterSeconds;
+    const message = Number.isFinite(waitSeconds) && waitSeconds > 0
+      ? `${e.message} En az ${waitSeconds} saniye bekleyin.` : e.message;
+    setUserMessage(e.code === "SOURCE_UNAVAILABLE" ? "Ürün kaynağına erişilemiyor" : "Bağlantı hatası", message, "#fee2e2");
     showRetry(scanProduct);
   } finally {
     clearProductLookupSlowTimer();
