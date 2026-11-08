@@ -26,10 +26,11 @@ function currentAccountPage() { return location.hash === '#admin' ? 'admin' : lo
 
 function updateSession() {
   const signedIn = Boolean(accessToken);
+  accountEl('authChoice').classList.toggle('hidden',signedIn||Boolean(activationToken));
   accountEl('sessionStatus').textContent = activationToken ? 'İlk giriş için aşağıdaki bağlantıyı doğrula ve parolanı belirle.' : signedIn ? 'Oturum açık.' : 'Mevcut EatSure hesabınla giriş yap.';
-  accountEl('loginForm').classList.toggle('hidden', signedIn || Boolean(activationToken));
+  accountEl('loginForm').classList.toggle('hidden', signedIn || Boolean(activationToken) || accountEl('authChoice').classList.contains('hidden')===false);
   accountEl('logoutBtn').classList.toggle('hidden', !signedIn);
-  accountEl('profileContent').classList.toggle('hidden', !signedIn || !accountProfile);
+  accountEl('profileContent').classList.toggle('hidden', !signedIn || !accountProfile); accountEl('roleChoice').classList.toggle('hidden',!signedIn||!accountProfile||!canReview());
   accountEl('reloadProfileBtn').classList.toggle('hidden', !signedIn || Boolean(accountProfile));
   accountEl('passwordSetup').classList.toggle('hidden', !signedIn || !passwordSetup);
   accountEl('activationCard').classList.toggle('hidden', !activationToken);
@@ -159,6 +160,7 @@ async function loadAdmin() {
   const results = await Promise.allSettled([accountRequest('/review/queue'), accountRequest('/review/summary')]);
   if (generation !== queueGeneration || session !== accountGeneration || !canReview()) { accountEl('refreshAdminBtn').disabled = false; return; }
   const [queue, summary] = results;
+  await loadAccountRequests();
   if (queue.status === 'fulfilled') { reviewItems = queue.value.contributions; renderQueue(); accountEl('adminStatus').textContent = ''; }
   else accountEl('adminStatus').textContent = queue.reason.message;
   const panel = accountEl('budgetSummary'); panel.replaceChildren();
@@ -171,6 +173,7 @@ async function loadAdmin() {
   accountEl('refreshAdminBtn').disabled = false;
 }
 
+let activeReviewPreview=null;
 function syncReviewFields() {
   const approved = accountEl('reviewDecision').value === 'approved';
   accountEl('verifiedFields').disabled = !approved;
@@ -178,11 +181,11 @@ function syncReviewFields() {
   accountEl('submitReviewBtn').textContent = approved ? 'Doğrulanmış ürünü yayınla' : 'İncelemeyi kaydet';
   accountEl('reviewReason').disabled = approved;
   accountEl('reviewReason').closest('form').querySelector('label[for="reviewReason"]').classList.toggle('hidden', approved);
-  accountEl('reviewReason').classList.toggle('hidden', approved);
+  accountEl('reviewReason').classList.toggle('hidden', approved); accountEl('submitReviewBtn').disabled=approved&&!activeReviewPreview; accountEl('reviewPreview').classList.add('hidden');
 }
 function openReview(item) {
   if (!canReview()) return;
-  selectedReview = item; accountEl('reviewForm').reset(); syncReviewFields();
+  selectedReview = item; activeReviewPreview=null; accountEl('reviewForm').reset(); syncReviewFields();
   accountEl('reviewStatus').textContent = '';
   accountEl('reviewBarcode').textContent = `${item.barcode} · ${KIND_NAMES[item.kind] || 'Katkı'}`;
   accountEl('reviewContext').textContent = item.context_product_version_id
@@ -206,6 +209,8 @@ function openReview(item) {
   accountEl('verifiedBrand').value = structured.brand || '';
   loadReviewMedia(item);
   accountEl('reviewDetail').classList.remove('hidden');
+  accountEl('reviewPriorProduct').textContent = 'Ürün/sürüm/karar/etiket ve işlem geçmişi yükleniyor…';
+  accountRequest('/review/'+encodeURIComponent(item.id)+'/detail').then(detail=>{if(selectedReview?.id!==item.id)return;const box=accountEl('reviewPriorProduct');box.replaceChildren();const v=detail.version,d=detail.analysis;if(detail.product)box.append(textNode('p','Mevcut ürün: '+detail.product.barcode));if(v){box.append(textNode('h4','Sürüm '+v.version_no+' · '+(v.is_current?'etkin':'geçmiş')+' · '+v.version_status+' · '+readableDate(v.created_at)),textNode('p','Ad: '+(v.product_name_text||'Bilinmiyor')+' · Marka: '+(v.brand_text||'Bilinmiyor')),textNode('p','İçindekiler: '+(v.ingredients_text||'Belirtilmemiş')),textNode('p','Alerjenler: '+(v.allergens_text||'Belirtilmemiş')+' · İzler: '+(v.traces_text||'Belirtilmemiş')),textNode('p','Beyanlar: '+(v.labels_text||'Belirtilmemiş')),textNode('p','Ham etiket: '+(v.raw_label_text||'Belirtilmemiş'),'preserve-lines'));}if(d)box.append(textNode('p','Önceki karar: '+d.decision_level+' · '+(d.decision_reason||'')),textNode('p','Karar kanıtı: '+JSON.stringify(d.evidence_json||[])));else box.append(textNode('p','Bu barkod için önceden yayınlanmış ürün sürümü yok.'));if(detail.source)box.append(textNode('p','Kaynak: '+detail.source.source_type+' · '+(detail.source.source_ref||'bağlantı yok')+' · '+readableDate(detail.source.captured_at)));if(detail.siblingDisputes?.length){box.append(textNode('h4','Aynı üründeki diğer açık itirazlar'));for(const other of detail.siblingDisputes)box.append(textNode('p',other.id+' · '+STATUS_NAMES[other.status]+' · sürüm '+(other.context_product_version_id||'bağ yok')));}for(const ev of detail.events||[]){box.append(textNode('p',readableDate(ev.created_at)+' · '+ev.action+' · '+(ev.reason_code||'gerekçe yok')+(ev.product_version_id?' · sürüm '+ev.product_version_id:''),'preserve-lines'));if(ev.reason_text)box.append(textNode('p',ev.reason_text,'preserve-lines'));}}).catch(()=>{if(selectedReview?.id===item.id)accountEl('reviewPriorProduct').textContent='Ürün geçmişi şu anda açılamıyor.';});
   accountEl('reviewHeading').focus();
 }
 
@@ -285,7 +290,7 @@ accountEl('reviewForm').addEventListener('submit', async event => {
   event.preventDefault(); const button = accountEl('submitReviewBtn');
   if (button.disabled || !selectedReview || !canReview()) return;
   const item = selectedReview, session = accountGeneration;
-  const body = { status: accountEl('reviewDecision').value, note: accountEl('reviewDecision').value === 'approved' ? 'Etiket ve kaynak bağımsız olarak doğrulandı.' : accountEl('reviewReason').value.trim() };
+  const body = { status: accountEl('reviewDecision').value, previewId: activeReviewPreview, note: accountEl('reviewDecision').value === 'approved' ? 'Etiket ve kaynak bağımsız olarak doğrulandı.' : accountEl('reviewReason').value.trim() };
   if (body.status === 'approved') body.verifiedLabel = { barcode: item.barcode, name: accountEl('verifiedName').value.trim(), brand: accountEl('verifiedBrand').value.trim(), sourceUrl: accountEl('verifiedSource').value.trim(), labelText: accountEl('verifiedLabel').value, evidenceChecked: accountEl('evidenceChecked').checked };
   button.disabled = true; accountEl('reviewStatus').textContent = 'İnceleme kaydediliyor…';
   try {
@@ -398,3 +403,10 @@ async function openContributionDetail(contribution, card, generation) {
     });
   } catch(error){if(alive())panel.textContent=error.message;}
 }
+
+async function loadAccountRequests(){if(!canReview())return;try{const {requests}=await accountRequest('/review/account-requests');const list=accountEl('accountRequests');list.replaceChildren();for(const r of requests){const li=textNode('li',r.display_name+' · '+r.email,'record-card');const approve=textNode('button','Onayla ve davet gönder','btn btn-primary btn-small');approve.type='button';approve.addEventListener('click',async()=>{approve.disabled=true;try{await accountRequest('/review/account-requests/'+encodeURIComponent(r.id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'approved'})});await loadAccountRequests();}catch(e){li.append(textNode('p',e.message,'feedback'));approve.disabled=false;}});const reject=textNode('button','Reddet','btn btn-secondary btn-small');reject.type='button';reject.addEventListener('click',async()=>{await accountRequest('/review/account-requests/'+encodeURIComponent(r.id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'rejected'})});await loadAccountRequests();});li.append(approve,reject);list.append(li);}}catch(e){accountEl('adminStatus').textContent=e.message;}}
+
+accountEl('showLoginBtn').addEventListener('click',()=>{accountEl('loginForm').classList.remove('hidden');accountEl('accountRequestForm').classList.add('hidden');accountEl('authChoice').classList.add('hidden');});accountEl('showRequestBtn').addEventListener('click',()=>{accountEl('accountRequestForm').classList.remove('hidden');accountEl('loginForm').classList.add('hidden');accountEl('authChoice').classList.add('hidden');});accountEl('cancelRequestBtn').addEventListener('click',()=>{accountEl('accountRequestForm').classList.add('hidden');accountEl('authChoice').classList.remove('hidden');});accountEl('accountRequestForm').addEventListener('submit',async e=>{e.preventDefault();try{const r=await requestJson('/auth/requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({displayName:accountEl('requestName').value,email:accountEl('requestEmail').value})});accountEl('requestStatus').textContent=r.message;accountEl('accountRequestForm').reset();}catch(err){accountEl('requestStatus').textContent=err.message;}});
+
+accountEl('previewReviewBtn').addEventListener('click',async()=>{if(!selectedReview||!canReview())return;const itemId=selectedReview.id;const v={barcode:selectedReview.barcode,name:accountEl('verifiedName').value.trim(),brand:accountEl('verifiedBrand').value.trim(),sourceUrl:accountEl('verifiedSource').value.trim(),labelText:accountEl('verifiedLabel').value,evidenceChecked:accountEl('evidenceChecked').checked};const snapshot=JSON.stringify(v),button=accountEl('previewReviewBtn');button.disabled=true;try{const p=await accountRequest('/review/'+encodeURIComponent(itemId)+'/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({verifiedLabel:v})});const now={barcode:selectedReview?.barcode,name:accountEl('verifiedName').value.trim(),brand:accountEl('verifiedBrand').value.trim(),sourceUrl:accountEl('verifiedSource').value.trim(),labelText:accountEl('verifiedLabel').value,evidenceChecked:accountEl('evidenceChecked').checked};if(selectedReview?.id!==itemId||JSON.stringify(now)!==snapshot)return;activeReviewPreview=p.previewId;const box=accountEl('reviewPreview');box.replaceChildren(textNode('h4','Sunucu karar önizlemesi'),textNode('p','Kayıt işlemi ve uygunluk kararı ayrı değerlendirilir. Kaynak bağlantısı biçimsel olarak geçerli; kaynağın doğruluğu ayrıca otomatik doğrulanmıyor.'),textNode('p','Sunucu kararı: '+p.decision.level),textNode('p','Karar kanıtı: '+JSON.stringify(p.evidence||[])));box.classList.remove('hidden');accountEl('submitReviewBtn').disabled=false;}catch(e){accountEl('reviewStatus').textContent=e.message;}finally{button.disabled=false;}});for(const id of ['verifiedName','verifiedBrand','verifiedSource','verifiedLabel','evidenceChecked'])accountEl(id).addEventListener('input',()=>{activeReviewPreview=null;accountEl('submitReviewBtn').disabled=accountEl('reviewDecision').value==='approved';accountEl('reviewPreview').classList.add('hidden');});
+accountEl('continueUserBtn').addEventListener('click',()=>{location.hash='#tara';});accountEl('continueAdminBtn').addEventListener('click',()=>{if(canReview())location.hash='#admin';});
