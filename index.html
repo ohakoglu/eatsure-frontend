@@ -214,15 +214,16 @@
       </section>
       <section class="card">
         <div class="section-heading"><h3>İnceleme kuyruğu</h3><span id="queueCount" class="badge"></span></div>
-        <label class="label" for="queueSearch">Barkod veya açıklamada ara</label><input id="queueSearch" class="input" type="search" placeholder="Barkod ya da sözcük" />
-        <label class="label" for="queueFilter">Durum</label><select id="queueFilter" class="input"><option value="all">Tüm açık katkılar</option><option value="pending">İnceleme bekleyen</option><option value="needs_more_info">Ek bilgi bekleyen</option></select>
+        <label class="label" for="queueSearch">Barkod, açıklama veya önerilen bilgide ara</label><input id="queueSearch" class="input" type="search" placeholder="Barkod ya da sözcük" />
+        <label class="label" for="queueFilter">Durum</label><select id="queueFilter" class="input"><option value="open">Açık katkılar</option><option value="pending">İnceleme bekleyen</option><option value="needs_more_info">Ek bilgi bekleyen</option><option value="closed">Kapanmış incelemeler</option><option value="all">Tüm kayıtlar</option><option value="approved">Onaylandı</option><option value="rejected">Reddedildi</option><option value="withdrawn">Geri çekildi</option><option value="expired">Süresi doldu</option></select>
         <p id="adminStatus" class="feedback" role="status" aria-live="polite"></p>
         <ul id="reviewQueue" class="record-list"></ul>
-        <p class="muted small">Süresi dolmamış en eski 100 açık katkı gösterilir.</p>
+        <div class="section-heading"><button id="queuePreviousBtn" class="btn btn-secondary btn-small" type="button">Önceki</button><button id="queueNextBtn" class="btn btn-secondary btn-small" type="button">Sonraki</button></div>
+        <p class="muted small">Kayıtlar sunucuda sayfalanır. Bir incelemeci kaydı 30 dakika üstlenebilir; yeni yanıt ve 48 saati aşan bekleme ayrıca işaretlenir.</p>
       </section>
       <section id="reviewDetail" class="card hidden" aria-labelledby="reviewHeading">
         <div class="section-heading"><h3 id="reviewHeading" tabindex="-1">Katkıyı değerlendir</h3><button id="closeReviewBtn" class="btn btn-secondary btn-small">Kapat</button></div>
-        <p id="reviewBarcode" class="record-title"></p><p id="reviewContext" class="muted small"></p><div id="reviewStructuredFields" class="preserve-lines"></div><p id="reviewNote" class="preserve-lines"></p><div id="reviewPriorProduct" class="preserve-lines"></div><div id="reviewPreview" class="card hidden"></div><div id="reviewMedia" class="contribution-photo-grid" aria-label="Katkı fotoğrafları"></div>
+        <p id="reviewBarcode" class="record-title"></p><p id="reviewContext" class="muted small"></p><p id="reviewClaimStatus" class="feedback" role="status" aria-live="polite"></p><button id="releaseReviewBtn" class="btn btn-secondary btn-small hidden" type="button">İncelemeyi bırak</button><div id="reviewStructuredFields" class="preserve-lines"></div><p id="reviewNote" class="preserve-lines"></p><div id="reviewPriorProduct" class="preserve-lines"></div><div id="reviewPreview" class="card hidden"></div><div id="reviewMedia" class="contribution-photo-grid" aria-label="Katkı fotoğrafları"></div>
         <form id="reviewForm" class="account-form">
           <label for="reviewDecision">İşlem</label><select id="reviewDecision" class="input"><option value="needs_more_info">Ek bilgi iste</option><option value="rejected">Reddet</option><option value="approved">Doğrulanmış etiketi onayla</option></select>
           <label for="reviewReason">İnceleme notu</label><textarea id="reviewReason" class="input" rows="3" minlength="3" maxlength="2000" required></textarea>

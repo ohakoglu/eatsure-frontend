@@ -7,6 +7,9 @@ let accountProfile = null;
 let accountGeneration = 0;
 let expiryTimer = null;
 let reviewItems = [];
+let queueRequestGeneration = 0;
+const reviewQueueState = { page: 1, pageSize: 50, status: 'open', q: '', total: 0, totalPages: 0 };
+let activeReviewClaim = false;
 let selectedReview = null;
 let queueGeneration = 0;
 let historyGeneration = 0;
@@ -41,13 +44,13 @@ function updateSession() {
 }
 
 function clearAccountSession(message) {
-  accountGeneration++; queueGeneration++; historyGeneration++; reviewMediaGeneration++;
+  accountGeneration++; queueGeneration++;queueRequestGeneration++; historyGeneration++; reviewMediaGeneration++;activeReviewClaim=false;
   clearTimeout(expiryTimer); accessToken = null; accountProfile = null; reviewItems = []; selectedReview = null;
   passwordSetup = false; accountEl('passwordSetupForm').reset(); accountEl('passwordStatus').textContent = '';
   activationToken = null; accountEl('activationStatus').textContent = '';
-  for (const id of ['profileEmail', 'profileCreated', 'profileVerified', 'profileRole', 'contributionHistory', 'reviewQueue', 'budgetSummary', 'reviewNote', 'reviewBarcode', 'reviewContext', 'reviewStructuredFields', 'reviewMedia', 'queueCount', 'profileStatus', 'reviewStatus', 'adminStatus', 'contributionStatus']) accountEl(id).replaceChildren();
+  for (const id of ['profileEmail', 'profileCreated', 'profileVerified', 'profileRole', 'contributionHistory', 'reviewQueue', 'budgetSummary', 'reviewNote', 'reviewBarcode', 'reviewContext', 'reviewClaimStatus','reviewStructuredFields', 'reviewMedia', 'queueCount', 'profileStatus', 'reviewStatus', 'adminStatus', 'contributionStatus']) accountEl(id).replaceChildren();
   for (const id of ['loginForm', 'profileForm', 'reviewForm', 'contributionForm']) accountEl(id).reset();
-  accountEl('reviewDetail').classList.add('hidden');
+  accountEl('reviewDetail').classList.add('hidden');accountEl('releaseReviewBtn').classList.add('hidden');
   updateSession();
   if (message) accountEl('sessionStatus').textContent = message;
 }
@@ -132,20 +135,34 @@ async function loadContributions() {
 }
 
 function renderQueue() {
-  const search = accountEl('queueSearch').value.trim().toLocaleLowerCase('tr-TR');
-  const status = accountEl('queueFilter').value;
-  const visible = reviewItems.filter(item => (status === 'all' || item.status === status) && `${item.barcode} ${item.note || ''} ${JSON.stringify(item.structured_fields || {})}`.toLocaleLowerCase('tr-TR').includes(search));
   const list = accountEl('reviewQueue'); list.replaceChildren();
-  accountEl('queueCount').textContent = `${visible.length} / ${reviewItems.length} katkı`;
-  for (const contribution of visible) {
-    const item = textNode('li', '', 'record-card');
-    item.append(textNode('h4', contribution.barcode, 'record-title'), textNode('span', STATUS_NAMES[contribution.status], 'badge'),
-      textNode('p', `${KIND_NAMES[contribution.kind] || 'Katkı'} · ${readableDate(contribution.created_at)}`, 'muted small'),
-      textNode('p', contribution.note || 'Açıklama yok.', 'preserve-lines'));
-    const open = textNode('button', 'Katkıyı incele', 'btn btn-secondary'); open.type = 'button';
-    open.addEventListener('click', () => openReview(contribution)); item.append(open); list.append(item);
+  accountEl('queueCount').textContent = `${reviewQueueState.total} katkı · ${reviewQueueState.totalPages ? `sayfa ${reviewQueueState.page}/${reviewQueueState.totalPages}` : 'sonuç yok'}`;
+  const groups=new Map();for(const contribution of reviewItems){const key=contribution.barcode;const rows=groups.get(key)||[];rows.push(contribution);groups.set(key,rows);}
+  for (const [barcode,contributions] of groups) {
+    const group=textNode('li','','record-card');group.append(textNode('h4',`${barcode} · ${contributions.length} katkı bu sayfada`,'record-title'));
+    for(const contribution of contributions){
+      const row=textNode('section','','review-queue-entry');
+      row.append(textNode('span',STATUS_NAMES[contribution.status]||contribution.status,'badge'),textNode('p',`${KIND_NAMES[contribution.kind]||'Katkı'} · ${readableDate(contribution.created_at)}`,'muted small'));
+      if(contribution.note)row.append(textNode('p',contribution.note,'preserve-lines'));
+      const created=Date.parse(contribution.created_at),activity=Date.parse(contribution.activity_at||contribution.created_at);
+      if(contribution.status==='pending'&&activity>created+1000)row.append(textNode('span','Yeni kullanıcı yanıtı','badge badge-info'));
+      if(contribution.status==='pending'&&Number.isFinite(activity)&&Date.now()-activity>=48*60*60*1000)row.append(textNode('span','48 saati aşkın süredir inceleme bekliyor','badge badge-warning'));
+      if(contribution.claimed_by&&Date.now()-Date.parse(contribution.claimed_at)<30*60*1000)row.append(textNode('p',contribution.claimed_by===accountProfile?.id?'İncelemeyi sen üstlendin':'Başka bir incelemeci üstlendi','muted small'));
+      const open=textNode('button','Katkıyı incele','btn btn-secondary');open.type='button';open.addEventListener('click',()=>openReview(contribution));row.append(open);group.append(row);
+    }
+    list.append(group);
   }
-  if (!visible.length) list.append(textNode('li', reviewItems.length ? 'Aramana uygun katkı bulunamadı.' : 'İnceleme bekleyen katkı yok.', 'empty-message'));
+  if (!reviewItems.length) list.append(textNode('li', reviewQueueState.total ? 'Bu sayfada kayıt yok.' : 'Bu filtreyle kayıt bulunamadı.','empty-message'));
+  accountEl('queuePreviousBtn').disabled=reviewQueueState.page<=1;
+  accountEl('queueNextBtn').disabled=reviewQueueState.page>=reviewQueueState.totalPages;
+}
+
+async function loadReviewQueue(){
+  if(!canReview())return;const generation=++queueRequestGeneration,session=accountGeneration;
+  accountEl('adminStatus').textContent='İnceleme kayıtları yükleniyor…';
+  const params=new URLSearchParams({page:String(reviewQueueState.page),pageSize:String(reviewQueueState.pageSize),status:reviewQueueState.status,q:reviewQueueState.q});
+  try{const result=await accountRequest('/review/queue?'+params);if(generation!==queueRequestGeneration||session!==accountGeneration||!canReview())return;reviewItems=result.contributions;reviewQueueState.total=Number.isInteger(result.total)?result.total:reviewItems.length;reviewQueueState.totalPages=Number.isInteger(result.totalPages)?result.totalPages:Math.ceil(reviewQueueState.total/reviewQueueState.pageSize);renderQueue();accountEl('adminStatus').textContent='';}
+  catch(error){if(generation===queueRequestGeneration&&session===accountGeneration)accountEl('adminStatus').textContent=error.message;}
 }
 
 async function loadAdmin() {
@@ -154,15 +171,12 @@ async function loadAdmin() {
   accountEl('refreshAdminBtn').disabled = true;
   accountEl('adminStatus').textContent = 'Kuyruk yükleniyor…';
   accountEl('reviewDetail').classList.add('hidden'); selectedReview = null;
-  reviewItems = []; accountEl('reviewQueue').replaceChildren(); accountEl('queueCount').textContent = '';
+  queueRequestGeneration++;reviewItems = []; accountEl('reviewQueue').replaceChildren(); accountEl('queueCount').textContent = '';
   accountEl('budgetSummary').textContent = 'Kullanım yükleniyor…';
   // A summary failure must not hide a usable review queue, or vice versa.
-  const results = await Promise.allSettled([accountRequest('/review/queue'), accountRequest('/review/summary')]);
+  const results = await Promise.allSettled([loadReviewQueue(), accountRequest('/review/summary'),loadAccountRequests()]);
   if (generation !== queueGeneration || session !== accountGeneration || !canReview()) { accountEl('refreshAdminBtn').disabled = false; return; }
-  const [queue, summary] = results;
-  await loadAccountRequests();
-  if (queue.status === 'fulfilled') { reviewItems = queue.value.contributions; renderQueue(); accountEl('adminStatus').textContent = ''; }
-  else accountEl('adminStatus').textContent = queue.reason.message;
+  const [, summary] = results;
   const panel = accountEl('budgetSummary'); panel.replaceChildren();
   if (summary.status === 'fulfilled') {
     const budget = summary.value.budget;
@@ -176,16 +190,19 @@ async function loadAdmin() {
 let activeReviewPreview=null;
 function syncReviewFields() {
   const approved = accountEl('reviewDecision').value === 'approved';
-  accountEl('verifiedFields').disabled = !approved;
+  accountEl('verifiedFields').disabled = !approved||!activeReviewClaim;
   accountEl('verifiedFields').classList.toggle('hidden', !approved);
   accountEl('submitReviewBtn').textContent = approved ? 'Doğrulanmış ürünü yayınla' : 'İncelemeyi kaydet';
-  accountEl('reviewReason').disabled = approved;
+  accountEl('reviewDecision').disabled=!activeReviewClaim;
+  accountEl('reviewReason').disabled = approved||!activeReviewClaim;
   accountEl('reviewReason').closest('form').querySelector('label[for="reviewReason"]').classList.toggle('hidden', approved);
-  accountEl('reviewReason').classList.toggle('hidden', approved); accountEl('submitReviewBtn').disabled=approved&&!activeReviewPreview; accountEl('reviewPreview').classList.add('hidden');
+  accountEl('reviewReason').classList.toggle('hidden', approved);accountEl('previewReviewBtn').disabled=!activeReviewClaim;accountEl('submitReviewBtn').disabled=!activeReviewClaim||(approved&&!activeReviewPreview);accountEl('reviewPreview').classList.add('hidden');
 }
 function openReview(item) {
   if (!canReview()) return;
-  selectedReview = item; activeReviewPreview=null; accountEl('reviewForm').reset(); syncReviewFields();
+  const priorReview=selectedReview;if(priorReview&&activeReviewClaim&&priorReview.id!==item.id)accountRequest('/review/'+encodeURIComponent(priorReview.id)+'/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'release'})}).catch(()=>{});
+  selectedReview = item; activeReviewPreview=null;activeReviewClaim=false; accountEl('reviewForm').reset(); syncReviewFields();
+  accountEl('reviewClaimStatus').textContent='İnceleme üstleniliyor…';accountEl('releaseReviewBtn').classList.add('hidden');
   accountEl('reviewStatus').textContent = '';
   accountEl('reviewBarcode').textContent = `${item.barcode} · ${KIND_NAMES[item.kind] || 'Katkı'}`;
   accountEl('reviewContext').textContent = item.context_product_version_id
@@ -210,7 +227,8 @@ function openReview(item) {
   loadReviewMedia(item);
   accountEl('reviewDetail').classList.remove('hidden');
   accountEl('reviewPriorProduct').textContent = 'Ürün/sürüm/karar/etiket ve işlem geçmişi yükleniyor…';
-  accountRequest('/review/'+encodeURIComponent(item.id)+'/detail').then(detail=>{if(selectedReview?.id!==item.id)return;const box=accountEl('reviewPriorProduct');box.replaceChildren();const v=detail.version,d=detail.analysis;if(detail.product)box.append(textNode('p','Mevcut ürün: '+detail.product.barcode));if(v){box.append(textNode('h4','Sürüm '+v.version_no+' · '+(v.is_current?'etkin':'geçmiş')+' · '+v.version_status+' · '+readableDate(v.created_at)),textNode('p','Ad: '+(v.product_name_text||'Bilinmiyor')+' · Marka: '+(v.brand_text||'Bilinmiyor')),textNode('p','İçindekiler: '+(v.ingredients_text||'Belirtilmemiş')),textNode('p','Alerjenler: '+(v.allergens_text||'Belirtilmemiş')+' · İzler: '+(v.traces_text||'Belirtilmemiş')),textNode('p','Beyanlar: '+(v.labels_text||'Belirtilmemiş')),textNode('p','Ham etiket: '+(v.raw_label_text||'Belirtilmemiş'),'preserve-lines'));}if(d)box.append(textNode('p','Önceki karar: '+d.decision_level+' · '+(d.decision_reason||'')),textNode('p','Karar kanıtı: '+JSON.stringify(d.evidence_json||[])));else box.append(textNode('p','Bu barkod için önceden yayınlanmış ürün sürümü yok.'));if(detail.source)box.append(textNode('p','Kaynak: '+detail.source.source_type+' · '+(detail.source.source_ref||'bağlantı yok')+' · '+readableDate(detail.source.captured_at)));if(detail.siblingDisputes?.length){box.append(textNode('h4','Aynı üründeki diğer açık itirazlar'));for(const other of detail.siblingDisputes)box.append(textNode('p',other.id+' · '+STATUS_NAMES[other.status]+' · sürüm '+(other.context_product_version_id||'bağ yok')));}for(const ev of detail.events||[]){box.append(textNode('p',readableDate(ev.created_at)+' · '+ev.action+' · '+(ev.reason_code||'gerekçe yok')+(ev.product_version_id?' · sürüm '+ev.product_version_id:''),'preserve-lines'));if(ev.reason_text)box.append(textNode('p',ev.reason_text,'preserve-lines'));}}).catch(()=>{if(selectedReview?.id===item.id)accountEl('reviewPriorProduct').textContent='Ürün geçmişi şu anda açılamıyor.';});
+  accountRequest('/review/'+encodeURIComponent(item.id)+'/detail').then(detail=>{if(selectedReview?.id!==item.id)return;const box=accountEl('reviewPriorProduct');box.replaceChildren();const v=detail.version,d=detail.analysis;if(detail.product)box.append(textNode('p','Mevcut ürün: '+detail.product.barcode));if(v){box.append(textNode('h4','Sürüm '+v.version_no+' · '+(v.is_current?'etkin':'geçmiş')+' · '+v.version_status+' · '+readableDate(v.created_at)),textNode('p','Ad: '+(v.product_name_text||'Bilinmiyor')+' · Marka: '+(v.brand_text||'Bilinmiyor')),textNode('p','İçindekiler: '+(v.ingredients_text||'Belirtilmemiş')),textNode('p','Alerjenler: '+(v.allergens_text||'Belirtilmemiş')+' · İzler: '+(v.traces_text||'Belirtilmemiş')),textNode('p','Beyanlar: '+(v.labels_text||'Belirtilmemiş')),textNode('p','Ham etiket: '+(v.raw_label_text||'Belirtilmemiş'),'preserve-lines'));}if(detail.publishedVersions?.length){box.append(textNode('h4','İşlem geçmişindeki ürün sürümleri'));for(const published of detail.publishedVersions){const card=document.createElement('details'),summary=textNode('summary',`Sürüm ${published.version_no} · ${published.version_status} · ${published.product_name_text||'Ad yok'} · ${readableDate(published.created_at)}`);card.append(summary,textNode('p','Ürün sürümü kimliği: '+published.id),textNode('p','Marka: '+(published.brand_text||'Belirtilmemiş')),textNode('p','İçindekiler: '+(published.ingredients_text||'Belirtilmemiş'),'preserve-lines'),textNode('p','Alerjenler: '+(published.allergens_text||'Belirtilmemiş')+' · İzler: '+(published.traces_text||'Belirtilmemiş'),'preserve-lines'),textNode('p','Beyanlar: '+(published.labels_text||'Belirtilmemiş'),'preserve-lines'),textNode('p','Kaynak kaydı: '+(published.source_record_id||'yok')));const savedDecision=(detail.publishedAnalyses||[]).find(result=>result.product_version_id===published.id);if(savedDecision)card.append(textNode('p','Yayın kararı: '+savedDecision.decision_level+' · '+(savedDecision.decision_reason||'')),textNode('p','Kanıt: '+JSON.stringify(savedDecision.evidence_json||[])));box.append(card);}}if(d)box.append(textNode('p','Önceki karar: '+d.decision_level+' · '+(d.decision_reason||'')),textNode('p','Karar kanıtı: '+JSON.stringify(d.evidence_json||[])));else if(!detail.publishedVersions?.length)box.append(textNode('p','Bu barkod için önceden yayınlanmış ürün sürümü yok.'));if(detail.source)box.append(textNode('p','Kaynak: '+detail.source.source_type+' · '+(detail.source.source_ref||'bağlantı yok')+' · '+readableDate(detail.source.captured_at)));if(detail.productContributions?.length){box.append(textNode('h4','Aynı ürüne ait diğer katkılar'));for(const other of detail.productContributions){const row=textNode('div',`${STATUS_NAMES[other.status]||other.status} · ${KIND_NAMES[other.kind]||'Katkı'} · ${readableDate(other.created_at)}`,'record-card');row.append(textNode('p',other.review_note||''));const jump=textNode('button','Bu katkıyı aç','btn btn-secondary btn-small');jump.type='button';jump.addEventListener('click',()=>{const found=reviewItems.find(entry=>entry.id===other.id)||other;openReview(found);});row.append(jump);box.append(row);}}for(const ev of detail.events||[]){box.append(textNode('p',readableDate(ev.created_at)+' · '+ev.action+' · '+(ev.reason_code||'gerekçe yok')+(ev.product_version_id?' · yayın sürümü '+ev.product_version_id:''),'preserve-lines'));if(ev.reason_text)box.append(textNode('p',ev.reason_text,'preserve-lines'));}}).catch(()=>{if(selectedReview?.id===item.id)accountEl('reviewPriorProduct').textContent='Ürün geçmişi şu anda açılamıyor.';});
+  accountRequest('/review/'+encodeURIComponent(item.id)+'/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'claim'})}).then(()=>{if(selectedReview?.id!==item.id)return;activeReviewClaim=true;accountEl('reviewClaimStatus').textContent='Bu incelemeyi 30 dakika boyunca sen üstlendin.';accountEl('releaseReviewBtn').classList.remove('hidden');syncReviewFields();}).catch(()=>{if(selectedReview?.id!==item.id)return;accountEl('reviewClaimStatus').textContent='Başka bir incelemeci üstlenmiş, kayıt kapanmış veya süre dolmuş. Detayı okuyabilirsin; işlem yapamazsın.';});
   accountEl('reviewHeading').focus();
 }
 
@@ -282,10 +300,13 @@ accountEl('profileForm').addEventListener('submit', async event => {
   finally { button.disabled = false; }
 });
 accountEl('refreshAdminBtn').addEventListener('click', loadAdmin);
-accountEl('queueSearch').addEventListener('input', renderQueue);
-accountEl('queueFilter').addEventListener('change', renderQueue);
+let queueSearchTimer=null;accountEl('queueSearch').addEventListener('input',()=>{clearTimeout(queueSearchTimer);reviewQueueState.q=accountEl('queueSearch').value;reviewQueueState.page=1;queueSearchTimer=setTimeout(loadReviewQueue,300);});
+accountEl('queueFilter').addEventListener('change',()=>{reviewQueueState.status=accountEl('queueFilter').value;reviewQueueState.page=1;loadReviewQueue();});
+accountEl('queuePreviousBtn').addEventListener('click',()=>{if(reviewQueueState.page>1){reviewQueueState.page--;loadReviewQueue();}});
+accountEl('queueNextBtn').addEventListener('click',()=>{if(reviewQueueState.page<reviewQueueState.totalPages){reviewQueueState.page++;loadReviewQueue();}});
 accountEl('reviewDecision').addEventListener('change', syncReviewFields);
-accountEl('closeReviewBtn').addEventListener('click', () => { selectedReview = null; reviewMediaGeneration++; accountEl('reviewDetail').classList.add('hidden'); });
+accountEl('closeReviewBtn').addEventListener('click', () => { const item=selectedReview;if(item&&activeReviewClaim)accountRequest('/review/'+encodeURIComponent(item.id)+'/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'release'})}).catch(()=>{});selectedReview = null;activeReviewClaim=false; reviewMediaGeneration++; accountEl('reviewDetail').classList.add('hidden'); });
+accountEl('releaseReviewBtn').addEventListener('click',async()=>{const item=selectedReview;if(!item||!activeReviewClaim)return;try{await accountRequest('/review/'+encodeURIComponent(item.id)+'/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'release'})});activeReviewClaim=false;activeReviewPreview=null;accountEl('reviewClaimStatus').textContent='İnceleme kuyruğa bırakıldı.';accountEl('releaseReviewBtn').classList.add('hidden');syncReviewFields();}catch(error){accountEl('reviewClaimStatus').textContent=error.message;}});
 accountEl('reviewForm').addEventListener('submit', async event => {
   event.preventDefault(); const button = accountEl('submitReviewBtn');
   if (button.disabled || !selectedReview || !canReview()) return;
