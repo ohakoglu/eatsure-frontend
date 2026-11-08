@@ -104,6 +104,9 @@ async function loadContributions() {
       item.append(textNode('h4', contribution.barcode, 'record-title'), textNode('span', STATUS_NAMES[contribution.status] || 'Bilinmeyen durum', 'badge'),
         textNode('p', `${KIND_NAMES[contribution.kind] || 'Katkı'} · ${readableDate(contribution.created_at)}`, 'muted small'));
       if (contribution.review_note) item.append(textNode('p', contribution.review_note === 'Verified label approved' ? 'Doğrulanmış etiket onaylandı.' : contribution.review_note, 'preserve-lines'));
+      if (contribution.activity_at && (!contribution.owner_read_at || contribution.activity_at > contribution.owner_read_at)) item.append(textNode('p', 'Yeni durum bildirimi: ' + (STATUS_NAMES[contribution.status] || ''), 'feedback'));
+      const detail = textNode('button', 'Detay ve işlem geçmişi', 'btn btn-secondary btn-small'); detail.type = 'button';
+      detail.addEventListener('click', () => openContributionDetail(contribution, item, generation)); item.append(detail);
       const isOpen = ['pending', 'needs_more_info'].includes(contribution.status);
       const remove = textNode('button', isOpen ? 'Katkıyı geri çek ve açıklamayı sil' : 'Kişisel açıklamayı sil', 'btn btn-secondary btn-small');
       remove.type = 'button';
@@ -186,6 +189,11 @@ function openReview(item) {
     ? `Bağlı ürün sürümü #${item.context_product_version_no || '?'} (${item.context_product_version_id}) · analiz: ${item.context_analysis_result_id || 'yok'} · karar: ${item.context_decision_level || 'belirtilmemiş'}`
     : `Bağlı sunucu sonucu (${item.context_source || 'tarama'}): ${(item.context_fingerprint || 'mevcut').slice(0, 12)} · karar: ${item.context_decision_level || 'belirtilmemiş'}`;
   accountEl('reviewNote').textContent = item.note || 'Açıklama yok.';
+  const reviewSession = accountGeneration;
+  accountRequest('/contributions/' + encodeURIComponent(item.id) + '/events').then(({events}) => {
+    if (reviewSession !== accountGeneration || selectedReview?.id !== item.id) return;
+    for (const entry of events || []) if (entry.reason_text) accountEl('reviewNote').append(textNode('p', readableDate(entry.created_at) + ' · ' + (entry.action === 'user_replied' ? 'Kullanıcı yanıtı: ' : 'İnceleme: ') + entry.reason_text, 'preserve-lines'));
+  }).catch(() => {});
   const fieldLabels = { productName: 'Gönderilen ürün adı', brand: 'Gönderilen marka', currentValue: 'Mevcut bilgi', proposedValue: 'Önerilen bilgi', errorType: 'İtiraz türü' };
   const errorLabels = { wrong_product: 'Ürün eşleşmesi yanlış', wrong_gluten_decision: 'Gluten kararı yanlış', missing_ingredient_evidence: 'İçindekiler kanıtı eksik', allergen_or_trace: 'Alerjen veya çapraz bulaşma', other: 'Diğer' };
   const structured = item.structured_fields || {};
@@ -350,3 +358,43 @@ function handleAccountLocation() {
 }
 window.addEventListener('hashchange', handleAccountLocation);
 handleAccountLocation();
+
+async function openContributionDetail(contribution, card, generation) {
+  const session = accountGeneration;
+  card.querySelector('.contribution-thread')?.remove();
+  const panel = textNode('section', 'Detaylar yükleniyor…', 'contribution-thread'); card.append(panel);
+  const alive = () => session === accountGeneration && generation === historyGeneration && panel.isConnected;
+  try {
+    const base = '/contributions/' + encodeURIComponent(contribution.id);
+    const [detail, history, photos] = await Promise.all([accountRequest(base + '/detail'), accountRequest(base + '/events'), accountRequest(base + '/media')]);
+    if (!alive()) return;
+    panel.replaceChildren(); const item = detail.contribution;
+    panel.append(textNode('h4', STATUS_NAMES[item.status] || item.status), textNode('p', item.note || 'Kişisel açıklama saklanmıyor.', 'preserve-lines'));
+    for (const [key,value] of Object.entries(item.structured_fields || {})) panel.append(textNode('p', key + ': ' + value));
+    const actions = {submitted:'Katkı gönderildi',needs_more_info:'Ek bilgi istendi',user_replied:'Kullanıcı yanıtı',approved:'Kayıt onaylandı',rejected:'Reddedildi',withdrawn:'Geri çekildi',expired:'Süre doldu',personal_data_erased:'Kişisel bilgiler silindi'};
+    for (const entry of history.events || []) panel.append(textNode('p', readableDate(entry.created_at) + ' · ' + (actions[entry.action] || entry.action) + (entry.reason_text ? ': ' + entry.reason_text : ''), 'preserve-lines'));
+    for (const photo of photos.media || []) { const img = document.createElement('img'); img.src=photo.url; img.alt='Katkı kanıtı'; img.style.maxWidth='100%'; img.referrerPolicy='no-referrer'; panel.append(textNode('p', photo.replyEventId ? 'Yanıta eklenen kanıt · ' + readableDate((history.events || []).find(e=>e.id===photo.replyEventId)?.created_at) : 'İlk katkıya eklenen kanıt'), img); }
+    if (item.activity_at) accountRequest(base + '/read', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({activityAt:item.activity_at})}).catch(()=>{});
+    if (!detail.canReply) { panel.append(textNode('p', 'Bu durumda yanıt gönderilemez. Ek bilgi istendiğinde bu alandan cevap verebilirsin.')); return; }
+    const form=document.createElement('form'), note=document.createElement('textarea'), file=document.createElement('input'), consent=document.createElement('input');
+    note.required=true; note.minLength=3; note.maxLength=2000; note.setAttribute('aria-label','Ek bilgi yanıtı');
+    file.type='file'; file.accept='image/jpeg,image/png,image/webp'; file.setAttribute('aria-label','Ek kanıt fotoğrafı');
+    consent.type='checkbox'; const label=document.createElement('label'); label.append(consent,document.createTextNode(' Ek fotoğrafın bu katkının kalan saklama süresince (en fazla 30 gün) özel alanda inceleme için tutulmasını onaylıyorum.'));
+    const preview=document.createElement('img'); preview.alt='Ek kanıt önizlemesi'; preview.style.maxWidth='100%'; preview.hidden=true;
+    let staged=null, previewUrl=null, key=crypto.randomUUID(), lastPayload=null;
+    const discard=()=>{if(staged){accountRequest('/contributions/media/'+staged,{method:'DELETE'}).catch(()=>{});staged=null;}};
+    file.addEventListener('change',()=>{discard();if(previewUrl)URL.revokeObjectURL(previewUrl);previewUrl=file.files[0]?URL.createObjectURL(file.files[0]):null;preview.hidden=!previewUrl;if(previewUrl)preview.src=previewUrl;consent.required=Boolean(file.files[0]);});
+    const send=textNode('button','Yanıtı gönder ve yeniden incelemeye al','btn btn-primary'); send.type='submit';
+    const status=textNode('p','','feedback'); status.setAttribute('role','status');
+    form.append(textNode('label','Ek bilgi yanıtı'),note,file,preview,label,send,status);panel.append(form);
+    form.addEventListener('submit',async event=>{
+      event.preventDefault();if(send.disabled)return;send.disabled=true;
+      try {
+        if(file.files[0] && !consent.checked) throw new Error('Fotoğraf saklama onayı gerekli.');
+        if(file.files[0] && !staged){const blob=await prepareImageBlob(file.files[0]);if(!alive())return;const uploaded=await requestJson(base+'/reply-media',{method:'POST',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'image/jpeg','X-Moderation-Photo-Consent':CONTRIBUTION_PHOTO_CONSENT_VERSION},body:blob});staged=uploaded.media.id;}
+        const payload={note:note.value.trim(),mediaIds:staged?[staged]:[]};const encoded=JSON.stringify(payload);if(lastPayload!==encoded){key=crypto.randomUUID();lastPayload=encoded;}
+        await accountRequest(base+'/replies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,idempotencyKey:key})});staged=null;if(previewUrl)URL.revokeObjectURL(previewUrl);if(alive())await loadContributions();
+      } catch(error){if(alive())status.textContent=error.message;} finally {send.disabled=false;}
+    });
+  } catch(error){if(alive())panel.textContent=error.message;}
+}
