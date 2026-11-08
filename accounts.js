@@ -10,6 +10,7 @@ let reviewItems = [];
 let selectedReview = null;
 let queueGeneration = 0;
 let historyGeneration = 0;
+let reviewMediaGeneration = 0;
 let passwordSetup = false;
 let authOptionsLoaded = false;
 let activationToken = null;
@@ -39,11 +40,11 @@ function updateSession() {
 }
 
 function clearAccountSession(message) {
-  accountGeneration++; queueGeneration++; historyGeneration++;
+  accountGeneration++; queueGeneration++; historyGeneration++; reviewMediaGeneration++;
   clearTimeout(expiryTimer); accessToken = null; accountProfile = null; reviewItems = []; selectedReview = null;
   passwordSetup = false; accountEl('passwordSetupForm').reset(); accountEl('passwordStatus').textContent = '';
   activationToken = null; accountEl('activationStatus').textContent = '';
-  for (const id of ['profileEmail', 'profileCreated', 'profileVerified', 'profileRole', 'contributionHistory', 'reviewQueue', 'budgetSummary', 'reviewNote', 'reviewBarcode', 'reviewContext', 'queueCount', 'profileStatus', 'reviewStatus', 'adminStatus', 'contributionStatus']) accountEl(id).replaceChildren();
+  for (const id of ['profileEmail', 'profileCreated', 'profileVerified', 'profileRole', 'contributionHistory', 'reviewQueue', 'budgetSummary', 'reviewNote', 'reviewBarcode', 'reviewContext', 'reviewStructuredFields', 'reviewMedia', 'queueCount', 'profileStatus', 'reviewStatus', 'adminStatus', 'contributionStatus']) accountEl(id).replaceChildren();
   for (const id of ['loginForm', 'profileForm', 'reviewForm', 'contributionForm']) accountEl(id).reset();
   accountEl('reviewDetail').classList.add('hidden');
   updateSession();
@@ -129,7 +130,7 @@ async function loadContributions() {
 function renderQueue() {
   const search = accountEl('queueSearch').value.trim().toLocaleLowerCase('tr-TR');
   const status = accountEl('queueFilter').value;
-  const visible = reviewItems.filter(item => (status === 'all' || item.status === status) && `${item.barcode} ${item.note || ''}`.toLocaleLowerCase('tr-TR').includes(search));
+  const visible = reviewItems.filter(item => (status === 'all' || item.status === status) && `${item.barcode} ${item.note || ''} ${JSON.stringify(item.structured_fields || {})}`.toLocaleLowerCase('tr-TR').includes(search));
   const list = accountEl('reviewQueue'); list.replaceChildren();
   accountEl('queueCount').textContent = `${visible.length} / ${reviewItems.length} katkı`;
   for (const contribution of visible) {
@@ -185,8 +186,38 @@ function openReview(item) {
     ? `Bağlı ürün sürümü #${item.context_product_version_no || '?'} (${item.context_product_version_id}) · analiz: ${item.context_analysis_result_id || 'yok'} · karar: ${item.context_decision_level || 'belirtilmemiş'}`
     : `Bağlı sunucu sonucu (${item.context_source || 'tarama'}): ${(item.context_fingerprint || 'mevcut').slice(0, 12)} · karar: ${item.context_decision_level || 'belirtilmemiş'}`;
   accountEl('reviewNote').textContent = item.note || 'Açıklama yok.';
+  const fieldLabels = { productName: 'Gönderilen ürün adı', brand: 'Gönderilen marka', currentValue: 'Mevcut bilgi', proposedValue: 'Önerilen bilgi', errorType: 'İtiraz türü' };
+  const errorLabels = { wrong_product: 'Ürün eşleşmesi yanlış', wrong_gluten_decision: 'Gluten kararı yanlış', missing_ingredient_evidence: 'İçindekiler kanıtı eksik', allergen_or_trace: 'Alerjen veya çapraz bulaşma', other: 'Diğer' };
+  const structured = item.structured_fields || {};
+  accountEl('reviewStructuredFields').replaceChildren();
+  for (const [key, label] of Object.entries(fieldLabels)) if (typeof structured[key] === 'string' && structured[key]) {
+    const row = document.createElement('p'); const heading = document.createElement('strong'); heading.textContent = `${label}: `;
+    const value = document.createElement('span'); value.textContent = key === 'errorType' ? errorLabels[structured[key]] || 'Bilinmeyen tür' : structured[key]; row.append(heading, value); accountEl('reviewStructuredFields').append(row);
+  }
+  accountEl('verifiedName').value = structured.productName || '';
+  accountEl('verifiedBrand').value = structured.brand || '';
+  loadReviewMedia(item);
   accountEl('reviewDetail').classList.remove('hidden');
   accountEl('reviewHeading').focus();
+}
+
+async function loadReviewMedia(item) {
+  const generation = ++reviewMediaGeneration, container = accountEl('reviewMedia');
+  container.replaceChildren();
+  try {
+    const { media } = await accountRequest(`/contributions/${encodeURIComponent(item.id)}/media`);
+    if (generation !== reviewMediaGeneration || selectedReview?.id !== item.id) return;
+    const labels = { front_label: 'Ürün ön yüzü', ingredients_panel: 'İçindekiler / alerjen yüzü', extra: 'Ek fotoğraf' };
+    for (const photo of media || []) {
+      const card = document.createElement('figure'); card.className = 'contribution-photo-card';
+      const image = document.createElement('img'); image.src = photo.url; image.alt = labels[photo.role] || 'Katkı fotoğrafı';
+      const caption = document.createElement('figcaption'); caption.textContent = labels[photo.role] || 'Katkı fotoğrafı';
+      card.append(image, caption); container.append(card);
+    }
+    if (!media?.length) container.textContent = 'Bu katkıya bağlı saklanan fotoğraf yok.';
+  } catch {
+    if (generation === reviewMediaGeneration && selectedReview?.id === item.id) container.textContent = 'Fotoğraflar şu anda açılamıyor.';
+  }
 }
 
 function routeAccountPage() {
@@ -241,7 +272,7 @@ accountEl('refreshAdminBtn').addEventListener('click', loadAdmin);
 accountEl('queueSearch').addEventListener('input', renderQueue);
 accountEl('queueFilter').addEventListener('change', renderQueue);
 accountEl('reviewDecision').addEventListener('change', syncReviewFields);
-accountEl('closeReviewBtn').addEventListener('click', () => { selectedReview = null; accountEl('reviewDetail').classList.add('hidden'); });
+accountEl('closeReviewBtn').addEventListener('click', () => { selectedReview = null; reviewMediaGeneration++; accountEl('reviewDetail').classList.add('hidden'); });
 accountEl('reviewForm').addEventListener('submit', async event => {
   event.preventDefault(); const button = accountEl('submitReviewBtn');
   if (button.disabled || !selectedReview || !canReview()) return;

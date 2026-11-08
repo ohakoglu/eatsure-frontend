@@ -52,6 +52,10 @@ let photoFiles = {
 };
 let currentContributionContext = null;
 let contributionAttempt = null;
+const contributionPhotoFiles = { front_label: null, ingredients_panel: null, extra: null };
+const contributionStagedMedia = { front_label: null, ingredients_panel: null, extra: null };
+const contributionPreviewUrls = new Map();
+const CONTRIBUTION_PHOTO_CONSENT_VERSION = "2026-11-09.1";
 
 const PHOTO_STEPS = {
   front: {
@@ -147,9 +151,75 @@ function showRetry(action) {
 }
 function hideRetry() { document.getElementById("retryBtn").classList.add("hidden"); lastRetry = null; }
 
+function clearContributionPhotos(discardStaged = true) {
+  for (const [role, url] of contributionPreviewUrls) URL.revokeObjectURL(url);
+  contributionPreviewUrls.clear();
+  for (const role of Object.keys(contributionPhotoFiles)) {
+    if (discardStaged && contributionStagedMedia[role] && accessToken) accountRequest(`/contributions/media/${encodeURIComponent(contributionStagedMedia[role])}`, { method: "DELETE" }).catch(() => {});
+    contributionPhotoFiles[role] = null; contributionStagedMedia[role] = null;
+  }
+  for (const id of ["contributionFrontPhoto", "contributionIngredientsPhoto", "contributionExtraPhoto"]) document.getElementById(id).value = "";
+  document.getElementById("moderationPhotoConsent").checked = false;
+  document.getElementById("contributionPhotoPreviews").replaceChildren();
+}
+
+function updateContributionKindFields() {
+  const kind = document.getElementById("contributionKind").value;
+  const groups = {
+    new_product: ["contributionNewProductFields", ["contributionProductName", "contributionBrand"]],
+    label_correction: ["contributionCorrectionFields", ["contributionCurrentValue", "contributionProposedValue"]],
+    decision_dispute: ["contributionDisputeFields", ["contributionErrorType"]]
+  };
+  for (const [key, [groupId, inputIds]] of Object.entries(groups)) {
+    const active = kind === key;
+    document.getElementById(groupId).classList.toggle("hidden", !active);
+    for (const inputId of inputIds) {
+      const input = document.getElementById(inputId);
+      input.disabled = !active;
+      input.required = active && inputId !== "contributionErrorType";
+    }
+  }
+  document.getElementById("contributionFrontPhoto").required = kind === "new_product" && !contributionStagedMedia.front_label && !contributionPhotoFiles.front_label;
+  document.getElementById("contributionIngredientsPhoto").required = kind === "new_product" && !contributionStagedMedia.ingredients_panel && !contributionPhotoFiles.ingredients_panel;
+  document.getElementById("moderationPhotoConsent").required = Object.values(contributionStagedMedia).some(Boolean) || Object.values(contributionPhotoFiles).some(Boolean);
+}
+
+const CONTRIBUTION_PHOTO_INPUTS = [
+  ["front_label", "contributionFrontPhoto", "Ürün ön yüzü"],
+  ["ingredients_panel", "contributionIngredientsPhoto", "İçindekiler / alerjen yüzü"],
+  ["extra", "contributionExtraPhoto", "Ek fotoğraf"]
+];
+
+function renderContributionPhotoPreviews() {
+  const container = document.getElementById("contributionPhotoPreviews");
+  container.replaceChildren();
+  for (const [role, inputId, label] of CONTRIBUTION_PHOTO_INPUTS) {
+    const file = contributionPhotoFiles[role];
+    if (!file) continue;
+    const card = document.createElement("div"); card.className = "contribution-photo-card";
+    const image = document.createElement("img"); image.src = contributionPreviewUrls.get(role); image.alt = `${label} önizleme`;
+    const name = document.createElement("span"); name.textContent = `${label} · ${Math.ceil(file.size / 1024)} KB`;
+    const replace = document.createElement("button"); replace.type = "button"; replace.className = "btn btn-secondary btn-small"; replace.textContent = "Fotoğrafı değiştir";
+    replace.addEventListener("click", () => document.getElementById(inputId).click());
+    const remove = document.createElement("button"); remove.type = "button"; remove.className = "btn btn-secondary btn-small"; remove.textContent = "Kaldır";
+    remove.addEventListener("click", () => clearContributionPhoto(role, inputId));
+    card.append(image, name, replace, remove); container.append(card);
+  }
+}
+
+function clearContributionPhoto(role, inputId) {
+  const stagedId = contributionStagedMedia[role];
+  if (stagedId && accessToken) accountRequest(`/contributions/media/${encodeURIComponent(stagedId)}`, { method: "DELETE" }).catch(() => {});
+  if (contributionPreviewUrls.has(role)) URL.revokeObjectURL(contributionPreviewUrls.get(role));
+  contributionPreviewUrls.delete(role); contributionPhotoFiles[role] = null; contributionStagedMedia[role] = null;
+  document.getElementById(inputId).value = "";
+  renderContributionPhotoPreviews(); updateContributionKindFields();
+}
+
 function setBackendResult(data) {
   const trace = document.getElementById("decisionTrace");
   if (typeof data === "string") {
+    if (currentContributionContext) clearContributionPhotos();
     currentContributionContext = null;
     contributionAttempt = null;
     document.getElementById("contributionSection").classList.add("hidden");
@@ -157,7 +227,9 @@ function setBackendResult(data) {
     trace.textContent = data;
   } else {
     const context = data?.meta?.contributionContext;
-    currentContributionContext = context && typeof context.token === "string" && typeof context.barcode === "string" ? context : null;
+    const nextContext = context && typeof context.token === "string" && typeof context.barcode === "string" ? context : null;
+    if (currentContributionContext?.token !== nextContext?.token) clearContributionPhotos();
+    currentContributionContext = nextContext;
     contributionAttempt = null;
     const target = document.getElementById("contributionContextLabel");
     if (target) target.textContent = currentContributionContext
@@ -840,7 +912,7 @@ async function loadImageFromFile(file) {
   }
 }
 
-async function prepareImageBlob(file, maxDim = 1280) {
+async function prepareImageBlob(file, maxDim = 1280, quality = 0.9) {
   if (!file.type.startsWith("image/") || file.size > 10 * 1024 * 1024) throw new Error("En fazla 10 MB boyutunda bir fotoğraf seçin.");
   const img = await loadImageFromFile(file);
   const w = img.naturalWidth;
@@ -857,7 +929,7 @@ async function prepareImageBlob(file, maxDim = 1280) {
   ctx.drawImage(img, 0, 0, nw, nh);
 
   return new Promise(resolve => {
-    canvas.toBlob(blob => resolve(blob), "image/jpeg", 0.9);
+    canvas.toBlob(blob => resolve(blob), "image/jpeg", quality);
   });
 }
 
@@ -1051,17 +1123,45 @@ document.getElementById("contributionForm").addEventListener("submit", async eve
   if (!currentContributionContext?.token) { document.getElementById("contributionStatus").textContent = "Katkı için geçerli bir tarama sonucu gerekli. Ürünü yeniden tarayın."; return; }
   const kind = document.getElementById("contributionKind").value;
   const note = document.getElementById("contributionNote").value;
-  const requestFingerprint = JSON.stringify([currentContributionContext.token, kind, note.trim(), document.getElementById("retentionConsent").checked]);
-  if (!contributionAttempt || contributionAttempt.fingerprint !== requestFingerprint) {
-    const bytes = new Uint8Array(16); crypto.getRandomValues(bytes); bytes[6] = (bytes[6] & 0x0f) | 0x40; bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    const hex = [...bytes].map(value => value.toString(16).padStart(2, "0")).join("");
-    const idempotencyKey = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
-    contributionAttempt = { fingerprint: requestFingerprint, idempotencyKey };
-  }
+  const structuredFields = kind === "new_product"
+    ? { productName: document.getElementById("contributionProductName").value.trim(), brand: document.getElementById("contributionBrand").value.trim() }
+    : kind === "label_correction"
+      ? { currentValue: document.getElementById("contributionCurrentValue").value.trim(), proposedValue: document.getElementById("contributionProposedValue").value.trim() }
+      : { errorType: document.getElementById("contributionErrorType").value };
+  const consent = document.getElementById("moderationPhotoConsent").checked;
+  const hasPhotos = Object.values(contributionPhotoFiles).some(Boolean) || Object.values(contributionStagedMedia).some(Boolean);
+  if (hasPhotos && !consent) { document.getElementById("contributionStatus").textContent = "Fotoğraf kanıtını kaydetmek için ayrı moderasyon saklama onayı gerekli."; return; }
   button.disabled = true;
   try {
-    const result = await accountRequest("/contributions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ barcode: currentContributionContext.barcode, contextToken: currentContributionContext.token, idempotencyKey: contributionAttempt.idempotencyKey, kind, note, retentionConsent: document.getElementById("retentionConsent").checked }) });
+    const mediaIds = [];
+    for (const [role, inputId] of [["front_label","contributionFrontPhoto"],["ingredients_panel","contributionIngredientsPhoto"],["extra","contributionExtraPhoto"]]) {
+      if (!contributionStagedMedia[role] && contributionPhotoFiles[role]) {
+        document.getElementById("contributionStatus").textContent = "Fotoğraflar doğrulanıp özel alana yükleniyor…";
+        const image = await prepareImageBlob(contributionPhotoFiles[role], 1280, 0.82);
+        if (!image) throw new Error("Fotoğraf dönüştürülemedi. Başka bir görsel deneyin.");
+        const uploaded = await requestJson("/contributions/media", { method: "POST", headers: {
+          "Content-Type": "image/jpeg", Authorization: `Bearer ${accessToken}`,
+          "X-Contribution-Barcode": currentContributionContext.barcode,
+          "X-Contribution-Context": currentContributionContext.token,
+          "X-Contribution-Media-Role": role,
+          "X-Moderation-Photo-Consent": CONTRIBUTION_PHOTO_CONSENT_VERSION
+        }, body: image }, 35000);
+        contributionStagedMedia[role] = uploaded.media.id;
+      }
+      if (contributionStagedMedia[role]) mediaIds.push(contributionStagedMedia[role]);
+    }
+    const requestFingerprint = JSON.stringify([currentContributionContext.token, kind, note.trim(), structuredFields, mediaIds, document.getElementById("retentionConsent").checked, consent]);
+    if (!contributionAttempt || contributionAttempt.fingerprint !== requestFingerprint) {
+      const bytes = new Uint8Array(16); crypto.getRandomValues(bytes); bytes[6] = (bytes[6] & 0x0f) | 0x40; bytes[8] = (bytes[8] & 0x3f) | 0x80;
+      const hex = [...bytes].map(value => value.toString(16).padStart(2, "0")).join("");
+      const idempotencyKey = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+      contributionAttempt = { fingerprint: requestFingerprint, idempotencyKey };
+    }
+    document.getElementById("contributionStatus").textContent = "Katkı ve kanıtlar incelemeye gönderiliyor…";
+    const result = await accountRequest("/contributions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ barcode: currentContributionContext.barcode, contextToken: currentContributionContext.token, idempotencyKey: contributionAttempt.idempotencyKey, kind, note, retentionConsent: document.getElementById("retentionConsent").checked, structuredFields, mediaIds }) });
     document.getElementById("contributionStatus").textContent = result.message;
+    document.getElementById("contributionForm").reset();
+    clearContributionPhotos(false); contributionAttempt = null; updateContributionKindFields();
     if (document.getElementById("contributionKind").value === "decision_dispute") {
       userResultEl.replaceChildren();
       const pending = document.createElement("p");
@@ -1071,6 +1171,26 @@ document.getElementById("contributionForm").addEventListener("submit", async eve
   } catch (error) { document.getElementById("contributionStatus").textContent = error.message; }
   finally { button.disabled = false; }
 });
+
+for (const [role, inputId] of [["front_label","contributionFrontPhoto"],["ingredients_panel","contributionIngredientsPhoto"],["extra","contributionExtraPhoto"]]) {
+  document.getElementById(inputId).addEventListener("change", event => {
+    const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
+    const oldStaged = contributionStagedMedia[role];
+    if (oldStaged && accessToken) accountRequest(`/contributions/media/${encodeURIComponent(oldStaged)}`, { method: "DELETE" }).catch(() => {});
+    if (contributionPreviewUrls.has(role)) URL.revokeObjectURL(contributionPreviewUrls.get(role));
+    contributionStagedMedia[role] = null; contributionPhotoFiles[role] = file;
+    contributionPreviewUrls.set(role, URL.createObjectURL(file));
+    renderContributionPhotoPreviews(); updateContributionKindFields(); contributionAttempt = null;
+  });
+}
+document.getElementById("contributionKind").addEventListener("change", updateContributionKindFields);
+document.getElementById("moderationPhotoConsent").addEventListener("change", event => {
+  if (event.target.checked) return;
+  for (const [role, id] of Object.entries(contributionStagedMedia)) if (id && accessToken) accountRequest(`/contributions/media/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+  for (const role of Object.keys(contributionStagedMedia)) contributionStagedMedia[role] = null;
+  contributionAttempt = null; updateContributionKindFields();
+});
+updateContributionKindFields();
 // Keep diagnostics available during the pilot; disable explicitly at public launch.
 if (window.EATSURE_CONFIG?.enableDebug === false) document.querySelector(".debug-shell").classList.add("hidden");
-window.addEventListener("pagehide", event => { if (!event.persisted) for (const url of previewUrls.values()) URL.revokeObjectURL(url); });
+window.addEventListener("pagehide", event => { if (!event.persisted) { for (const url of previewUrls.values()) URL.revokeObjectURL(url); for (const url of contributionPreviewUrls.values()) URL.revokeObjectURL(url); } });

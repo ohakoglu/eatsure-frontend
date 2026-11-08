@@ -385,6 +385,14 @@ h3 {
 .profile-details dd { margin: 0; overflow-wrap: anywhere; }
 .record-list { list-style: none; display: grid; gap: 12px; padding: 0; margin: 16px 0; }
 .record-card { display: grid; gap: 9px; padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; overflow-wrap: anywhere; }
+.contribution-fields { min-width: 0; display: grid; gap: 10px; margin: 10px 0; padding: 14px; border: 1px solid #d8e1ea; border-radius: 10px; }
+.contribution-fields legend { padding: 0 5px; font-weight: 650; }
+.contribution-fields input:not([type="checkbox"]), .contribution-fields textarea, .contribution-fields select { width: 100%; min-width: 0; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }
+.contribution-fields input[type="file"] { max-width: 100%; padding: 5px 0; }
+.contribution-photo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 8px 0; }
+.contribution-photo-card { min-width: 0; display: grid; gap: 5px; padding: 8px; border: 1px solid #dbe3ea; border-radius: 8px; background: #fff; }
+.contribution-photo-card img { display: block; width: 100%; max-height: 180px; object-fit: contain; border-radius: 5px; background: #f1f5f9; }
+.contribution-photo-card span { overflow-wrap: anywhere; font-size: 12px; color: #475569; }
 .record-title { font-size: 16px; margin: 0; color: #0b2d6b; font-weight: 700; }
 .preserve-lines { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 .empty-message { text-align: center; padding: 24px 12px; color: #64748b; line-height: 1.6; background: #f8fafc; border-radius: 10px; }
