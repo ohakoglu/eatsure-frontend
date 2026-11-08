@@ -108,7 +108,8 @@
 
   <section id="contributionSection" class="card hidden">
     <h2>Bilgi düzeltme veya sonuca itiraz</h2>
-    <p>Katkılar incelemeye alınır; ana ürün kaydını doğrudan değiştirmez. Barkod gereklidir.</p>
+    <p>Katkılar incelemeye alınır; ana ürün kaydını doğrudan değiştirmez. Katkı, aşağıdaki sonucun barkoduna bağlanır.</p>
+    <p id="contributionContextLabel" class="muted small" aria-live="polite"></p>
     <a class="text-link" href="#profil">Hesabım ve katkı geçmişim</a>
     <form id="contributionForm">
       <label>Katkı türü <select id="contributionKind"><option value="decision_dispute">Sonuca itiraz</option><option value="label_correction">Etiket bilgisi düzeltme</option><option value="new_product">Yeni ürün bilgisi</option></select></label>
@@ -210,7 +211,7 @@
       </section>
       <section id="reviewDetail" class="card hidden" aria-labelledby="reviewHeading">
         <div class="section-heading"><h3 id="reviewHeading" tabindex="-1">Katkıyı değerlendir</h3><button id="closeReviewBtn" class="btn btn-secondary btn-small">Kapat</button></div>
-        <p id="reviewBarcode" class="record-title"></p><p id="reviewNote" class="preserve-lines"></p>
+        <p id="reviewBarcode" class="record-title"></p><p id="reviewContext" class="muted small"></p><p id="reviewNote" class="preserve-lines"></p>
         <form id="reviewForm" class="account-form">
           <label for="reviewDecision">İşlem</label><select id="reviewDecision" class="input"><option value="needs_more_info">Ek bilgi iste</option><option value="rejected">Reddet</option><option value="approved">Doğrulanmış etiketi onayla</option></select>
           <label for="reviewReason">İnceleme notu</label><textarea id="reviewReason" class="input" rows="3" minlength="3" maxlength="2000" required></textarea>

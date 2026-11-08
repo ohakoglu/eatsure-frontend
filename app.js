@@ -50,6 +50,8 @@ let photoFiles = {
   ingredients: null,
   extra: null
 };
+let currentContributionContext = null;
+let contributionAttempt = null;
 
 const PHOTO_STEPS = {
   front: {
@@ -148,10 +150,24 @@ function hideRetry() { document.getElementById("retryBtn").classList.add("hidden
 function setBackendResult(data) {
   const trace = document.getElementById("decisionTrace");
   if (typeof data === "string") {
+    currentContributionContext = null;
+    contributionAttempt = null;
+    document.getElementById("contributionSection").classList.add("hidden");
     backendResultEl.textContent = data;
     trace.textContent = data;
   } else {
-    backendResultEl.textContent = JSON.stringify(data, null, 2);
+    const context = data?.meta?.contributionContext;
+    currentContributionContext = context && typeof context.token === "string" && typeof context.barcode === "string" ? context : null;
+    contributionAttempt = null;
+    const target = document.getElementById("contributionContextLabel");
+    if (target) target.textContent = currentContributionContext
+      ? `Katkı bu sonucun ${currentContributionContext.barcode} barkoduna bağlanacak.`
+      : "Bu sonuç için sunucuya bağlı katkı bağlamı yok. Yeni bir barkod taraması başlatın.";
+    const debugData = data && typeof data === "object" ? { ...data } : data;
+    if (debugData?.meta?.contributionContext?.token) {
+      debugData.meta = { ...debugData.meta, contributionContext: Object.fromEntries(Object.entries(debugData.meta.contributionContext).filter(([key]) => key !== "token")) };
+    }
+    backendResultEl.textContent = JSON.stringify(debugData, null, 2);
     trace.textContent = data?.decision ? JSON.stringify({
       "Veri kaynağı": data.meta?.source || (data.meta?.openFoodFactsAvailable ? "OpenFoodFacts" : null),
       "Ürün kaynağı sorgusu ve tekrarlar": data.meta?.sourceLookup || null,
@@ -397,7 +413,7 @@ function renderUserResult(data) {
     resolution.textContent = "İlk okumalar arasındaki fark, fotoğraf ve etiket gerekçesi yeniden incelenerek giderildi. Etiket değerlendirmesi korundu; bu kontrol glutensiz olduğuna dair ek bir garanti değildir.";
     userResultEl.appendChild(resolution);
   }
-  document.getElementById("contributionSection").classList.remove("hidden");
+  document.getElementById("contributionSection").classList.toggle("hidden", !currentContributionContext);
 }
 
 function isInsufficientResult(data) {
@@ -1032,9 +1048,19 @@ document.getElementById("contributionForm").addEventListener("submit", async eve
   event.preventDefault();
   const button = document.getElementById("submitContributionBtn");
   if (!accessToken) { document.getElementById("contributionStatus").textContent = "Önce hesabınıza giriş yapın."; return; }
+  if (!currentContributionContext?.token) { document.getElementById("contributionStatus").textContent = "Katkı için geçerli bir tarama sonucu gerekli. Ürünü yeniden tarayın."; return; }
+  const kind = document.getElementById("contributionKind").value;
+  const note = document.getElementById("contributionNote").value;
+  const requestFingerprint = JSON.stringify([currentContributionContext.token, kind, note.trim(), document.getElementById("retentionConsent").checked]);
+  if (!contributionAttempt || contributionAttempt.fingerprint !== requestFingerprint) {
+    const bytes = new Uint8Array(16); crypto.getRandomValues(bytes); bytes[6] = (bytes[6] & 0x0f) | 0x40; bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = [...bytes].map(value => value.toString(16).padStart(2, "0")).join("");
+    const idempotencyKey = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+    contributionAttempt = { fingerprint: requestFingerprint, idempotencyKey };
+  }
   button.disabled = true;
   try {
-    const result = await accountRequest("/contributions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ barcode: barcodeInputEl.value.trim(), kind: document.getElementById("contributionKind").value, note: document.getElementById("contributionNote").value, retentionConsent: document.getElementById("retentionConsent").checked }) });
+    const result = await accountRequest("/contributions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ barcode: currentContributionContext.barcode, contextToken: currentContributionContext.token, idempotencyKey: contributionAttempt.idempotencyKey, kind, note, retentionConsent: document.getElementById("retentionConsent").checked }) });
     document.getElementById("contributionStatus").textContent = result.message;
     if (document.getElementById("contributionKind").value === "decision_dispute") {
       userResultEl.replaceChildren();

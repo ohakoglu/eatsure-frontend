@@ -1,6 +1,6 @@
 // Account state stays in this tab. Authorization always comes from the server.
 const accountEl = id => document.getElementById(id);
-const STATUS_NAMES = { pending: 'İnceleme bekliyor', needs_more_info: 'Ek bilgi bekliyor', rejected: 'Reddedildi', approved: 'Onaylandı', withdrawn: 'Geri çekildi' };
+const STATUS_NAMES = { pending: 'İnceleme bekliyor', needs_more_info: 'Ek bilgi bekliyor', rejected: 'Reddedildi', approved: 'Onaylandı', withdrawn: 'Geri çekildi', expired: 'Süresi doldu' };
 const KIND_NAMES = { decision_dispute: 'Sonuca itiraz', label_correction: 'Etiket düzeltme', new_product: 'Yeni ürün' };
 const ROLE_NAMES = { user: 'Kullanıcı', reviewer: 'İncelemeci', admin: 'Admin' };
 let accountProfile = null;
@@ -43,7 +43,7 @@ function clearAccountSession(message) {
   clearTimeout(expiryTimer); accessToken = null; accountProfile = null; reviewItems = []; selectedReview = null;
   passwordSetup = false; accountEl('passwordSetupForm').reset(); accountEl('passwordStatus').textContent = '';
   activationToken = null; accountEl('activationStatus').textContent = '';
-  for (const id of ['profileEmail', 'profileCreated', 'profileVerified', 'profileRole', 'contributionHistory', 'reviewQueue', 'budgetSummary', 'reviewNote', 'reviewBarcode', 'queueCount', 'profileStatus', 'reviewStatus', 'adminStatus', 'contributionStatus']) accountEl(id).replaceChildren();
+  for (const id of ['profileEmail', 'profileCreated', 'profileVerified', 'profileRole', 'contributionHistory', 'reviewQueue', 'budgetSummary', 'reviewNote', 'reviewBarcode', 'reviewContext', 'queueCount', 'profileStatus', 'reviewStatus', 'adminStatus', 'contributionStatus']) accountEl(id).replaceChildren();
   for (const id of ['loginForm', 'profileForm', 'reviewForm', 'contributionForm']) accountEl(id).reset();
   accountEl('reviewDetail').classList.add('hidden');
   updateSession();
@@ -103,10 +103,14 @@ async function loadContributions() {
       item.append(textNode('h4', contribution.barcode, 'record-title'), textNode('span', STATUS_NAMES[contribution.status] || 'Bilinmeyen durum', 'badge'),
         textNode('p', `${KIND_NAMES[contribution.kind] || 'Katkı'} · ${readableDate(contribution.created_at)}`, 'muted small'));
       if (contribution.review_note) item.append(textNode('p', contribution.review_note === 'Verified label approved' ? 'Doğrulanmış etiket onaylandı.' : contribution.review_note, 'preserve-lines'));
-      const remove = textNode('button', 'Açıklamamı sil', 'btn btn-secondary btn-small');
+      const isOpen = ['pending', 'needs_more_info'].includes(contribution.status);
+      const remove = textNode('button', isOpen ? 'Katkıyı geri çek ve açıklamayı sil' : 'Kişisel açıklamayı sil', 'btn btn-secondary btn-small');
       remove.type = 'button';
       remove.addEventListener('click', async () => {
-        if (!window.confirm('Açıklaman ve hesap bağlantın silinecek. İnceleme işlem kaydı korunacak. Devam edilsin mi?')) return;
+        const confirmText = isOpen
+          ? 'Katkı geri çekilecek; kişisel açıklaman ve hesap bağlantın silinecek. İşlem kaydı korunacak. Devam edilsin mi?'
+          : 'Kişisel açıklaman ve hesap bağlantın silinecek. Onaylanmış ürün kaydı ve inceleme geçmişi korunacak. Devam edilsin mi?';
+        if (!window.confirm(confirmText)) return;
         remove.disabled = true;
         try {
           await accountRequest(`/contributions/${encodeURIComponent(contribution.id)}/delete`, { method: 'POST' });
@@ -177,6 +181,9 @@ function openReview(item) {
   selectedReview = item; accountEl('reviewForm').reset(); syncReviewFields();
   accountEl('reviewStatus').textContent = '';
   accountEl('reviewBarcode').textContent = `${item.barcode} · ${KIND_NAMES[item.kind] || 'Katkı'}`;
+  accountEl('reviewContext').textContent = item.context_product_version_id
+    ? `Bağlı ürün sürümü #${item.context_product_version_no || '?'} (${item.context_product_version_id}) · analiz: ${item.context_analysis_result_id || 'yok'} · karar: ${item.context_decision_level || 'belirtilmemiş'}`
+    : `Bağlı sunucu sonucu (${item.context_source || 'tarama'}): ${(item.context_fingerprint || 'mevcut').slice(0, 12)} · karar: ${item.context_decision_level || 'belirtilmemiş'}`;
   accountEl('reviewNote').textContent = item.note || 'Açıklama yok.';
   accountEl('reviewDetail').classList.remove('hidden');
   accountEl('reviewHeading').focus();
