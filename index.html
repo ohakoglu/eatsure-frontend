@@ -235,6 +235,12 @@
             <label for="verifiedName">Ürün adı</label><input id="verifiedName" class="input" maxlength="200" required />
             <label for="verifiedBrand">Marka</label><input id="verifiedBrand" class="input" maxlength="200" required />
             <label for="verifiedSource">Doğrulama kaynağı bağlantısı (https://)</label><input id="verifiedSource" class="input" type="url" pattern="https://.*" maxlength="2000" required />
+            <label for="verifiedEvidenceKind">Kaynak türü</label><select id="verifiedEvidenceKind" class="input">
+              <option value="">Belirtilmedi</option><option value="package_photo">Paket fotoğrafı</option>
+              <option value="manual_label_text">Elle aktarılan etiket</option><option value="manufacturer_document">Üretici belgesi</option>
+            </select>
+            <label for="verifiedObservedOn">Gözlem tarihi (biliniyorsa)</label><input id="verifiedObservedOn" class="input" type="date" />
+            <label for="verifiedLabelDate">Etiket veya belge tarihi (biliniyorsa)</label><input id="verifiedLabelDate" class="input" type="date" />
             <label for="verifiedLabel">Etiketteki metin</label><textarea id="verifiedLabel" class="input" rows="7" minlength="10" maxlength="15000" placeholder="İçindekiler: …&#10;Alerjenler: …&#10;Eser miktarda: …" required></textarea>
             <label class="check-label"><input id="evidenceChecked" type="checkbox" required /> Etiket metnini ve kaynağını bağımsız olarak doğruladım; bu bilgilerin ürün kaydına yayınlanmasını onaylıyorum.</label>
           </fieldset>

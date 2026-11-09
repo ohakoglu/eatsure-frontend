@@ -416,6 +416,43 @@ function buildLogoDetectionElement(data) {
   return wrapperEl;
 }
 
+const evidenceNames = { package_photo: 'Paket fotoğrafı', manual_label_text: 'Elle girilen etiket',
+  off_community: 'Open Food Facts topluluk kaydı', manufacturer_document: 'Üretici belgesi',
+  official_certificate: 'Resmî sertifika', legacy_unknown: 'Önceki kayıt, kaynak türü bilinmiyor' };
+
+function evidenceDate(value, dayOnly = false) {
+  if (!value || !Number.isFinite(Date.parse(value))) return null;
+  const date = new Date(value);
+  return dayOnly ? date.toLocaleDateString('tr-TR', { timeZone: 'UTC' }) : date.toLocaleString('tr-TR');
+}
+
+function renderSourceProvenance(container, data) {
+  const add = (parent, tag, text) => {
+    const node = document.createElement(tag); node.textContent = text; parent.appendChild(node); return node;
+  };
+  const provenance = data.meta?.provenance;
+  const sources = Array.isArray(provenance?.sources) ? provenance.sources : [];
+  add(container, 'p', sources.length ? 'Kullanılan kaynaklar' : 'Kaynak türü doğrulanamadı');
+  if (sources.length) {
+    const list = document.createElement('ul'); container.appendChild(list);
+    for (const source of sources) {
+      const uses = { identity: 'ürün bilgisi', risk: 'risk uyarısı', decision: 'karar kanıtı' };
+      const details = [[source.observedAt, 'Gözlem tarihi', true], [source.labelDate, 'Etiket veya belge tarihi', true],
+        [source.reviewedAt, 'İnsan incelemesi', false], [source.receivedAt, 'EatSure’a iletilme', false],
+        [source.sourceUpdatedAt, 'Topluluk kaydının güncellenmesi', false], [source.checkedAt, 'Kaynağın kontrolü', false],
+        [source.validFrom, 'Sertifika başlangıcı', true], [source.validUntil, 'Sertifika geçerlilik sonu', true]]
+        .map(([value, label, day]) => { const date = evidenceDate(value, day); return date ? `${label}: ${date}` : null; }).filter(Boolean);
+      add(list, 'li', [evidenceNames[source.kind] || evidenceNames.legacy_unknown, uses[source.use], ...details].filter(Boolean).join(' · '));
+    }
+  }
+  const calculated = evidenceDate(provenance?.calculatedAt || data.decision?.ui?.sourceDate);
+  if (calculated) add(container, 'p', `Kararın hesaplanması: ${calculated}`);
+  const certificate = data.meta?.certificateCheck;
+  if (certificate && certificate.state !== 'verified' && certificate.status !== 'matched_current_official_snapshot') {
+    add(container, 'p', certificate.state === 'expired' ? 'Resmî sertifikanın süresi dolmuş.' : 'Resmî sertifika doğrulanamadı.');
+  }
+}
+
 function renderUserResult(data) {
   statusSection.classList.add("hidden");
   resultSection.classList.remove("hidden");
@@ -465,18 +502,14 @@ function renderUserResult(data) {
     evidenceEl.appendChild(item);
   }
   if (evidenceEl.childElementCount) userResultEl.appendChild(evidenceEl);
-  const sourcesEl = document.createElement("p");
-  sourcesEl.textContent = `Karar kaynakları: ${(data.decision?.sources || []).join(", ") || "Yeterli kaynak yok"}`;
-  userResultEl.appendChild(sourcesEl);
-  const dateEl = document.createElement("p");
-  const sourceDate = data.decision?.ui?.sourceDate;
-  dateEl.textContent = sourceDate && Number.isFinite(Date.parse(sourceDate)) ? `${data.decision?.ui?.staleFallback ? "Eski kaynak — yeniden doğrulama gerekli" : "Değerlendirme tarihi"}: ${new Date(sourceDate).toLocaleString("tr-TR")}` : "Kaynak tarihi doğrulanamadı";
-  userResultEl.appendChild(dateEl);
+  renderSourceProvenance(userResultEl, data);
   for (const warning of data.decision?.warnings || []) {
     const warningEl = document.createElement("p");
     const qualityWarnings = {
       product_not_found: "Ürün kaynağında bu barkod için kayıt yok. Etiket fotoğraflarıyla devam edebilirsiniz.",
       source_unavailable_using_previous: "Güncel ürün kaynağı doğrulanamadı. Önceki risk uyarısı korunuyor; yeniden doğrulama gerekiyor.",
+      possible_package_change: 'Paket bilgileri değişmiş olabilir. Etiket yeniden incelenmeli.',
+      product_identity_unverified: 'Kaynaklar aynı ürün veya varyanta güvenle bağlanamadı.',
       ocr_confidence_unavailable: "Metnin bazı bölümlerinde okuma güveni ölçülemiyor. Sonucu etiketle karşılaştırın.",
       ocr_confidence_low: "Bazı kelimeler güvenilir okunamadı. Etiketi net ve yakın çekerek yeniden deneyin.",
       ingredients_photo_unverified: "İçindekiler fotoğrafındaki içerik listesi doğrulanamadı. Bu yüzü yeniden çekin.",
