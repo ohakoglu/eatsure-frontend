@@ -128,7 +128,16 @@ async function requestJson(path, options = {}, timeoutMs = 70000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`${getBaseUrl()}${path}`, { ...options, signal: controller.signal });
+    const base = getBaseUrl();
+    const authenticated = new Headers(options.headers).has('Authorization');
+    if (authenticated) {
+      const target = new URL(base);
+      const loopback = host => ['localhost', '127.0.0.1', '[::1]'].includes(host);
+      const local = loopback(location.hostname) && loopback(target.hostname) && ['http:', 'https:'].includes(target.protocol);
+      if (!local && base !== DEFAULT_BACKEND_BASE) throw new Error('Oturum için güvenilir API adresi gerekli.');
+    }
+    const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
+    const response = await fetch(`${base}${path}`, { ...options, signal, ...(authenticated ? { redirect: 'error' } : {}) });
     let data = {};
     if (response.status !== 204) {
       try { data = await response.json(); } catch { throw new Error("Sunucu yanıtı okunamadı. Lütfen tekrar deneyin."); }
@@ -141,9 +150,20 @@ async function requestJson(path, options = {}, timeoutMs = 70000) {
     }
     return data;
   } catch (error) {
+    if (options.signal?.aborted) throw Object.assign(new Error('Analiz durduruldu.'), { code: 'PHOTO_CANCELLED' });
     if (error.name === "AbortError") throw new Error("İstek zaman aşımına uğradı. Fotoğraflarınız korunuyor; tekrar deneyebilirsiniz.");
     throw error;
   } finally { clearTimeout(timer); }
+}
+
+let activePhotoRequest = null;
+let photoAttempt = null;
+
+function ensureQuerySession() {
+  if (accessToken && !passwordSetup) return true;
+  location.hash = '#profil';
+  document.getElementById('sessionStatus').textContent = 'Sorgu yapmak için hesabınıza giriş yapın.';
+  return false;
 }
 function showRetry(action) {
   lastRetry = action;
@@ -832,6 +852,7 @@ async function startCameraScan() {
 }
 
 async function scanProduct() {
+  if (!ensureQuerySession()) return;
   if (productLookupInFlight || photoAnalysisInFlight) {
     return;
   }
@@ -865,7 +886,7 @@ async function scanProduct() {
 
   try {
     setBackendResult("Barkod analizi sürüyor; henüz yeni bir sonuç yok.");
-    const data = await requestJson(`/scan/${encodeURIComponent(barcode)}`, {}, 35000);
+    const data = await accountRequest(`/scan/${encodeURIComponent(barcode)}`, {}, 35000);
 
     clearProductLookupSlowTimer();
     setBackendResult(data);
@@ -957,6 +978,7 @@ async function buildImagePayload(role, file) {
 
 async function analyzePhotoFlow() {
   if (photoAnalysisInFlight || productLookupInFlight) return;
+  if (!ensureQuerySession()) return;
   if (!document.getElementById("externalProcessingConsent").checked) {
     setUserMessage("İşleme onayı gerekli", "Fotoğraf ve etiket metninin işlenmesi hakkındaki açıklamayı okuyup onaylayın.", "#fef3c7");
     return;
@@ -972,8 +994,20 @@ async function analyzePhotoFlow() {
   }
 
   hideRetry();
+  const cancel = document.getElementById('cancelPhotoAnalysis');
+  const quotaNotice = document.getElementById('photoQuotaNotice');
+  quotaNotice.textContent = '';
+  const controller = new AbortController();
+  activePhotoRequest = controller;
+  const barcode = (barcodeInputEl.value || '').trim();
+  const files = [photoFiles.front, photoFiles.ingredients, photoFiles.extra];
+  if (!photoAttempt || photoAttempt.barcode !== barcode || files.some((file, index) => photoAttempt.files[index] !== file)) {
+    photoAttempt = { barcode, files, id: crypto.randomUUID() };
+  }
   photoAnalysisInFlight = true;
   for (const button of photoSection.querySelectorAll("button")) button.disabled = true;
+  cancel.disabled = false;
+  cancel.classList.remove('hidden');
   setProductLookupBusy(true);
   setUserMessage("Fotoğraflar analiz ediliyor", "Bu kısım biraz sürebilir.", "#f3f4f6");
 
@@ -988,29 +1022,44 @@ async function analyzePhotoFlow() {
       images.push(await buildImagePayload("extra", photoFiles.extra));
     }
 
-    const data = await requestJson("/analyze-images", {
+    controller.signal.throwIfAborted();
+    const data = await accountRequest("/analyze-images", {
       method: "POST",
+      signal: controller.signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        barcode: (barcodeInputEl.value || "").trim() || undefined,
+        barcode: barcode || undefined,
+        requestId: photoAttempt.id,
         images,
         externalProcessingConsent: true,
         externalProcessingConsentVersion: "2026-11-03.3"
       })
-    }, 120000);
+    }, 65000);
+    photoAttempt = null;
 
     setBackendResult(data);
     renderUserResult(data);
+    const remaining = data?.meta?.photoQuotaRemaining;
+    if (Number.isInteger(remaining) && remaining >= 0 && remaining <= 3) {
+      quotaNotice.textContent = remaining ? `Bu ay ${remaining} fotoğraf analizi hakkınız kaldı.` : 'Bu ayki fotoğraf analizi hakkınız doldu.';
+    }
 
     const extracted = data?.extracted;
     if (extracted) {
       ocrTextEl.value = JSON.stringify(extracted, null, 2);
     }
   } catch (e) {
+    if (controller.signal.aborted || e.code === 'PHOTO_CANCELLED') {
+      if (accessToken) setUserMessage('Analiz durduruldu', 'Fotoğraflarınız seçili kaldı.', '#f3f4f6');
+      return;
+    }
     setBackendResult({ error: e.message });
     setUserMessage("Analiz hatası", e.message, "#fee2e2");
-    showRetry(analyzePhotoFlow);
+    if (e.code === 'PHOTO_ALREADY_SUBMITTED') photoAttempt = null;
+    if (!['AUTH_REQUIRED', 'PHOTO_ACCOUNT_LIMIT'].includes(e.code)) showRetry(analyzePhotoFlow);
   } finally {
+    if (activePhotoRequest === controller) activePhotoRequest = null;
+    cancel.classList.add('hidden');
     photoAnalysisInFlight = false;
     setProductLookupBusy(false);
     for (const button of photoSection.querySelectorAll("button")) button.disabled = false;
@@ -1048,6 +1097,7 @@ function handlePhotoSelected(role, file) {
 }
 
 async function analyzeTextFromDebug() {
+  if (!ensureQuerySession()) return;
   const labelText = (ocrTextEl.value || "").trim();
   const barcode = (barcodeInputEl.value || "").trim();
 
@@ -1057,7 +1107,7 @@ async function analyzeTextFromDebug() {
   }
 
   try {
-    const data = await requestJson("/analyze-label", {
+    const data = await accountRequest("/analyze-label", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1105,6 +1155,7 @@ extraFileInput.addEventListener("change", () => {
 addExtraPhotoBtn.addEventListener("click", () => showPhotoStep("extra"));
 skipExtraPhotoBtn.addEventListener("click", analyzePhotoFlow);
 document.getElementById("reanalyzeBtn").addEventListener("click", analyzePhotoFlow);
+document.getElementById('cancelPhotoAnalysis').addEventListener('click', () => activePhotoRequest?.abort());
 document.getElementById("retryBtn").addEventListener("click", () => { const retry = lastRetry; if (retry) retry(); });
 
 toggleDebugBtn.addEventListener("click", () => {

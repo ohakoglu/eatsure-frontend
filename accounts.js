@@ -44,6 +44,9 @@ function updateSession() {
 }
 
 function clearAccountSession(message) {
+  activePhotoRequest?.abort();
+  photoAttempt = null;
+  accountEl('photoQuotaNotice').textContent = '';
   accountGeneration++; queueGeneration++;queueRequestGeneration++; historyGeneration++; reviewMediaGeneration++;activeReviewClaim=false;
   clearTimeout(expiryTimer); accessToken = null; accountProfile = null; reviewItems = []; selectedReview = null;
   passwordSetup = false; accountEl('passwordSetupForm').reset(); accountEl('passwordStatus').textContent = '';
@@ -55,11 +58,11 @@ function clearAccountSession(message) {
   if (message) accountEl('sessionStatus').textContent = message;
 }
 
-async function accountRequest(path, options = {}) {
+async function accountRequest(path, options = {}, timeoutMs) {
   const token = accessToken, generation = accountGeneration;
   if (!token) throw new Error('Önce hesabına giriş yap.');
   try {
-    const data = await requestJson(path, { ...options, headers: { ...options.headers, Authorization: `Bearer ${token}` } });
+    const data = await requestJson(path, { ...options, headers: { ...options.headers, Authorization: `Bearer ${token}` } }, timeoutMs);
     if (generation !== accountGeneration || token !== accessToken) throw new Error('Oturum değişti. Yeniden giriş yap.');
     return data;
   } catch (error) {
@@ -180,7 +183,8 @@ async function loadAdmin() {
   const panel = accountEl('budgetSummary'); panel.replaceChildren();
   if (summary.status === 'fulfilled') {
     const budget = summary.value.budget;
-    for (const [value, label] of [[`$${Number(budget.dailyUsd).toFixed(2)}`, 'Günlük ortak bütçe'], [`${budget.attemptsUsed} / ${budget.dailyMax}`, 'Kullanılan çağrı'], [budget.attemptsRemaining, 'Kalan çağrı']]) {
+    const reported = budget.providerCosts?.length ? budget.providerCosts.map(row => `${row.provider} $${Number(row.usd).toFixed(4)}`).join(' · ') : 'Bekleniyor';
+    for (const [value, label] of [[`$${Number(budget.dailyUsd).toFixed(2)}`, 'Günlük ortak bütçe'], [`${budget.attemptsUsed} / ${budget.dailyMax}`, 'Bütçeden düşen çağrı'], [budget.reservedPending ?? '—', 'Bekleyen rezervasyon'], [budget.photoDispatches ?? '—', 'Gönderim kaydı olan fotoğraf çağrısı'], [budget.attemptsRemaining, 'Kalan çağrı'], [reported, 'Sağlayıcının bildirdiği maliyet']]) {
       const stat = textNode('div', '', 'stat'); stat.append(textNode('strong', value), textNode('span', label)); panel.append(stat);
     }
   } else panel.append(textNode('p', summary.reason.message));

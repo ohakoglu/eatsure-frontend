@@ -93,6 +93,8 @@
 
     <label><input id="externalProcessingConsent" type="checkbox" /> Fotoğraflarımın metin çıkarılması için Google Vision veya OpenAI'a; ek görsel kontrol etkinse aynı fotoğrafların doğrudan değerlendirme için OpenAI'a iletilmesini kabul ediyorum. Sonuçlar çelişirse fotoğraflar, okunan metin ve değerlendirme gerekçeleri OpenAI'a bir kez daha gönderilebilir. Fotoğraflar ve bu analizde çıkarılan metin uygulamanın veritabanına kaydedilmez. İşleme sağlayıcının saklama koşullarına tabidir; kişisel bilgi içeren fotoğraf göndermeyin.</label>
     <button id="reanalyzeBtn" class="btn btn-secondary">Seçili tüm fotoğraflarla yeniden analiz et</button>
+    <button id="cancelPhotoAnalysis" class="btn btn-secondary hidden" type="button">Analizi durdur</button>
+    <p id="photoQuotaNotice" role="status" aria-live="polite"></p>
     <div id="photoProgress" class="photo-progress"></div>
   </section>
 
