@@ -81,19 +81,19 @@ const PHOTO_STEPS = {
 
 const LEVEL_UI = {
   certified: {
-    title: "Çölyak için uygundur",
+    title: "Geçerli resmî glutensiz sertifika doğrulandı",
     color: "#dcfce7"
   },
   declared_gf_with_ingredients: {
-    title: "Üretici beyanına göre glutensiz",
+    title: "Üretici glutensiz beyanı",
     color: "#ecfccb"
   },
   declared_gf_no_ingredients: {
-    title: "Üretici glutensiz beyanı",
+    title: "Üretici glutensiz beyanı var, içerik bilgisi eksik",
     color: "#fef3c7"
   },
   gluten_present: {
-    title: "Çölyak için uygun değil",
+    title: "Gluten riski bulundu",
     color: "#fee2e2"
   },
   declaration_conflict: {
@@ -101,11 +101,11 @@ const LEVEL_UI = {
     color: "#ffedd5"
   },
   ingredients_safe_no_claim: {
-    title: "Glutensiz olduğu doğrulanamadı",
+    title: "Okunan içerikte açık gluten riski görülmedi",
     color: "#fef3c7"
   },
   insufficient_data: {
-    title: "Bilgi yetersiz",
+    title: "Glutensizliği doğrulamak için veri yetersiz",
     color: "#f3f4f6"
   },
   certification_suspended: {
@@ -115,17 +115,20 @@ const LEVEL_UI = {
 };
 
 function getBaseUrl() {
-  const configuredBase =
-    window.EATSURE_CONFIG?.backendBase ||
-    window.localStorage?.getItem("EATSURE_BACKEND_BASE") ||
-    DEFAULT_BACKEND_BASE;
-
+  let savedBase;
+  try { savedBase = window.localStorage?.getItem("EATSURE_BACKEND_BASE"); }
+  catch { /* The browser may disable local storage. */ }
+  const configuredBase = window.EATSURE_CONFIG?.backendBase || savedBase || DEFAULT_BACKEND_BASE;
   return String(configuredBase).replace(/\/+$/, "");
 }
 
 
 async function requestJson(path, options = {}, timeoutMs = 70000) {
   const controller = new AbortController();
+  const callerSignal = options.signal;
+  const cancel = () => controller.abort();
+  if (callerSignal?.aborted) cancel();
+  else callerSignal?.addEventListener('abort', cancel, { once: true });
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const base = getBaseUrl();
@@ -136,12 +139,21 @@ async function requestJson(path, options = {}, timeoutMs = 70000) {
       const local = loopback(location.hostname) && loopback(target.hostname) && ['http:', 'https:'].includes(target.protocol);
       if (!local && base !== DEFAULT_BACKEND_BASE) throw new Error('Oturum için güvenilir API adresi gerekli.');
     }
-    const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
-    const response = await fetch(`${base}${path}`, { ...options, signal, ...(authenticated ? { redirect: 'error' } : {}) });
+    let response;
+    try {
+      response = await fetch(`${base}${path}`, { ...options, signal: controller.signal, ...(authenticated ? { redirect: 'error' } : {}) });
+    } catch (error) {
+      if (error.name !== 'TypeError' || controller.signal.aborted) throw error;
+      throw new Error('Bağlantı kurulamadı. İnterneti kontrol edip tekrar deneyin.');
+    }
     let data = {};
     if (response.status !== 204) {
-      try { data = await response.json(); } catch { throw new Error("Sunucu yanıtı okunamadı. Lütfen tekrar deneyin."); }
+      try { data = await response.json(); } catch (error) {
+        if (controller.signal.aborted) throw error;
+        throw new Error("Sunucu yanıtı okunamadı. Lütfen tekrar deneyin.");
+      }
     }
+    if (controller.signal.aborted) throw new DOMException('Request cancelled', 'AbortError');
     if (!response.ok) {
       if (response.status === 401 && options.headers?.Authorization === `Bearer ${accessToken}`) { clearAccountSession(); }
       const failure = new Error(data.message || (response.status === 429 ? "Çok fazla istek. Biraz sonra tekrar deneyin." : "İstek tamamlanamadı. Lütfen tekrar deneyin."));
@@ -150,10 +162,13 @@ async function requestJson(path, options = {}, timeoutMs = 70000) {
     }
     return data;
   } catch (error) {
-    if (options.signal?.aborted) throw Object.assign(new Error('Analiz durduruldu.'), { code: 'PHOTO_CANCELLED' });
-    if (error.name === "AbortError") throw new Error("İstek zaman aşımına uğradı. Fotoğraflarınız korunuyor; tekrar deneyebilirsiniz.");
+    if (callerSignal?.aborted) throw Object.assign(new Error('Analiz durduruldu.'), { code: 'PHOTO_CANCELLED' });
+    if (controller.signal.aborted) throw new Error("İstek zaman aşımına uğradı. Tekrar deneyebilirsiniz.");
     throw error;
-  } finally { clearTimeout(timer); }
+  } finally {
+    clearTimeout(timer);
+    callerSignal?.removeEventListener('abort', cancel);
+  }
 }
 
 let activePhotoRequest = null;
@@ -285,7 +300,10 @@ function setBackendResult(data) {
 }
 
 function setUserMessage(title, message, color = "#f3f4f6", options = {}) {
-  resultSection.classList.add("hidden");
+  if (!options.keepResult) {
+    resultSection.classList.add("hidden");
+    userResultEl.replaceChildren();
+  }
   statusSection.classList.remove("hidden");
   userStatusEl.classList.toggle("is-loading", !!options.loading);
   userStatusEl.style.background = color;
@@ -298,6 +316,7 @@ function setUserMessage(title, message, color = "#f3f4f6", options = {}) {
   messageEl.textContent = message;
 
   userStatusEl.append(titleEl, messageEl);
+  document.getElementById('scanAnnouncement').textContent = `${title}. ${message}`;
 }
 
 function setProductLookupBusy(isBusy) {
@@ -461,7 +480,9 @@ function renderUserResult(data) {
   const ui = data.decision?.warnings?.includes("product_not_found")
     ? { title: "Ürün bulunamadı", color: "#f3f4f6" }
     : LEVEL_UI[level] || LEVEL_UI.insufficient_data;
-  const reason = data?.decision?.reason || "";
+  const reason = level === 'ingredients_safe_no_claim'
+    ? 'Okunabilen içerik üzerinden değerlendirme yapıldı. Glutensizliği doğrulamak için ambalajı veya üretici bilgisini kontrol edin.'
+    : data?.decision?.reason || "";
   const productIdentity = getProductIdentity(data);
 
   userResultEl.classList.remove("empty-state");
@@ -503,13 +524,22 @@ function renderUserResult(data) {
   }
   if (evidenceEl.childElementCount) userResultEl.appendChild(evidenceEl);
   renderSourceProvenance(userResultEl, data);
+  const messages = new Set();
   for (const warning of data.decision?.warnings || []) {
     const warningEl = document.createElement("p");
     const qualityWarnings = {
       product_not_found: "Ürün kaynağında bu barkod için kayıt yok. Etiket fotoğraflarıyla devam edebilirsiniz.",
       source_unavailable_using_previous: "Güncel ürün kaynağı doğrulanamadı. Önceki risk uyarısı korunuyor; yeniden doğrulama gerekiyor.",
       possible_package_change: 'Paket bilgileri değişmiş olabilir. Etiket yeniden incelenmeli.',
-      product_identity_unverified: 'Kaynaklar aynı ürün veya varyanta güvenle bağlanamadı.',
+      product_identity_unverified: 'Ambalajın barkodunu kontrol edin ve aynı ürünün ön yüzü ile içindekiler bölümünü yeniden çekin.',
+      pending_review: 'Bu sonuca itiraz inceleniyor. Güncel ambalajı veya üretici bilgisini kontrol edin.',
+      review_status_unavailable: 'İnceleme durumu şu anda kontrol edilemiyor. Biraz sonra yeniden deneyin.',
+      identity_unverified: 'Aynı paketin ön yüzünü ve içindekiler bölümünü yeniden çekin.',
+      cross_contamination: 'Çapraz bulaş uyarısı var. Ambalajdaki “eser miktarda” bölümünü kontrol edin.',
+      cross_contamination_conflict: 'Glutensiz beyanı ile çapraz bulaş uyarısı çelişiyor. Üreticiden doğrulama isteyin.',
+      off_allergen_gluten_conflict: 'Topluluk kaydında gluten alerjeni bildiriliyor. Paketin alerjen bölümünü kontrol edin.',
+      negative_claim_conflict: 'Etiketteki beyanlar çelişiyor. Üreticiden doğrulama isteyin.',
+      cert_conflict_cross_contamination: 'Sertifika bilgisi ile çapraz bulaş uyarısı çelişiyor. Güncel paketi ve üretici bilgisini kontrol edin.',
       ocr_confidence_unavailable: "Metnin bazı bölümlerinde okuma güveni ölçülemiyor. Sonucu etiketle karşılaştırın.",
       ocr_confidence_low: "Bazı kelimeler güvenilir okunamadı. Etiketi net ve yakın çekerek yeniden deneyin.",
       ingredients_photo_unverified: "İçindekiler fotoğrafındaki içerik listesi doğrulanamadı. Bu yüzü yeniden çekin.",
@@ -517,7 +547,10 @@ function renderUserResult(data) {
       independent_review_unavailable: "Ek görsel kontrol tamamlanamadı. Mevcut risk uyarılarını dikkate alın; daha sonra yeniden deneyin.",
       independent_review_required: "Fotoğraf ve etiket değerlendirmesi arasındaki bulgular çözülemedi. Mevcut risk uyarılarını dikkate alın; üreticiden doğrulama veya uzman incelemesi gerekiyor."
     };
-    warningEl.textContent = qualityWarnings[warning] || (warning.includes("oat") ? "Yulaf bulundu. Glutensiz üretim ve bulaş riski ayrıca doğrulanmalıdır." : `Uyarı: ${warning}`);
+    const message = qualityWarnings[warning] || (warning.includes("oat") ? "Yulaf bulundu. Glutensiz üretim ve bulaş riski ayrıca doğrulanmalıdır." : "Güncel ambalajdaki içindekiler ve alerjen bilgisini kontrol edin.");
+    if (messages.has(message)) continue;
+    messages.add(message);
+    warningEl.textContent = message;
     userResultEl.appendChild(warningEl);
   }
   const reviewEvidence = data.meta?.independentReview?.evidence;
@@ -539,6 +572,7 @@ function renderUserResult(data) {
     userResultEl.appendChild(resolution);
   }
   document.getElementById("contributionSection").classList.toggle("hidden", !currentContributionContext);
+  document.getElementById('scanAnnouncement').textContent = `${ui.title}. ${reason}`;
 }
 
 function isInsufficientResult(data) {
@@ -615,20 +649,20 @@ function showPhotoStep(step) {
   photoSection.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function startPhotoFlow() {
-  if (photoAnalysisInFlight) return;
+function resetPhotoSelection() {
   for (const url of previewUrls.values()) URL.revokeObjectURL(url);
   previewUrls.clear();
-  photoFiles = {
-    front: null,
-    ingredients: null,
-    extra: null
-  };
-
+  photoFiles = { front: null, ingredients: null, extra: null };
+  photoAttempt = null;
   frontFileInput.value = "";
   ingredientsFileInput.value = "";
   extraFileInput.value = "";
+  photoProgress.replaceChildren();
+}
 
+function startPhotoFlow() {
+  if (photoAnalysisInFlight) return;
+  resetPhotoSelection();
   setUserMessage("Etiket fotoğrafı gerekiyor", "Seni adım adım yönlendireceğiz.", "#f3f4f6");
   showPhotoStep("front");
 }
@@ -723,7 +757,7 @@ function logBarcodeVideoTrack(videoEl, source) {
   }
 }
 
-async function startZxingWithFallback(reader, videoEl, callback) {
+async function startZxingWithFallback(reader, videoEl, callback, generation) {
   const constraints = {
     video: {
       facingMode: { ideal: "environment" },
@@ -743,6 +777,8 @@ async function startZxingWithFallback(reader, videoEl, callback) {
       logBarcodeVideoTrack(videoEl, "decodeFromConstraints");
       return controls;
     } catch (err) {
+      stopVideoTracks(videoEl);
+      if (generation !== cameraGeneration || ['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(getBarcodeErrorName(err))) throw err;
       console.log("decodeFromConstraints başarısız, eski kamera yöntemi deneniyor:", err?.message || err);
     }
   }
@@ -765,8 +801,7 @@ function shouldIgnoreBarcodeError(error) {
   );
 }
 
-function stopVideoTracks() {
-  const videoEl = readerEl.querySelector("video");
+function stopVideoTracks(videoEl = readerEl.querySelector("video")) {
   const stream = videoEl?.srcObject;
 
   if (stream && typeof stream.getTracks === "function") {
@@ -832,7 +867,8 @@ async function startCameraScan() {
   const zxing = getZxing();
 
   if (!zxing?.BrowserMultiFormatReader) {
-    setUserMessage("Kamera hazır değil", "Barkod okuyucu yüklenemedi. İnternet bağlantısını kontrol et.", "#fee2e2");
+    setUserMessage("Kamera hazır değil", "İnternet bağlantısını kontrol edin veya barkodu elle girin.", "#fee2e2");
+    showManualBarcode();
     return;
   }
 
@@ -868,19 +904,23 @@ async function startCameraScan() {
     const controls = await startZxingWithFallback(
       barcodeCodeReader,
       videoEl,
-      callback
+      callback,
+      generation
     );
     if (generation !== cameraGeneration) {
       controls?.stop?.();
-      videoEl.srcObject?.getTracks().forEach(track => track.stop());
+      stopVideoTracks(videoEl);
       return;
     }
     barcodeScanControls = controls;
   } catch (e) {
-    if (generation !== cameraGeneration) { videoEl?.srcObject?.getTracks().forEach(track => track.stop()); return; }
-    console.error("Kamera barkod tarama hatası:", e);
+    if (generation !== cameraGeneration) { if (videoEl) stopVideoTracks(videoEl); return; }
+    const denied = ['NotAllowedError', 'PermissionDeniedError', 'SecurityError'].includes(getBarcodeErrorName(e));
     await stopCameraScan();
-    setUserMessage("Kamera açılamadı", e.message || "Barkod okuyucu başlatılamadı.", "#fee2e2");
+    setUserMessage("Kamera açılamadı", denied
+      ? "Barkodu elle girin veya tarayıcının bu site için kamera iznini açıp tekrar deneyin."
+      : "Kamerayı kullanan diğer sekmeleri kapatıp tekrar deneyin veya barkodu elle girin.", "#fee2e2");
+    showManualBarcode();
   }
 }
 
@@ -898,6 +938,7 @@ async function scanProduct() {
     return;
   }
 
+  const session = accountGeneration;
   hideRetry();
   setProductLookupBusy(true);
   await stopCameraScan();
@@ -920,23 +961,26 @@ async function scanProduct() {
   try {
     setBackendResult("Barkod analizi sürüyor; henüz yeni bir sonuç yok.");
     const data = await accountRequest(`/scan/${encodeURIComponent(barcode)}`, {}, 35000);
+    if (session !== accountGeneration) return;
 
     clearProductLookupSlowTimer();
     setBackendResult(data);
-    renderUserResult(data);
 
     if (isInsufficientResult(data)) {
       startPhotoFlow();
+      renderUserResult(data);
       setUserMessage(
         data.decision?.warnings?.includes("product_not_found") ? "Ürün bulunamadı" : "Ürün bilgisi yetersiz",
         data.decision?.reason || "Etiket fotoğraflarıyla devam edebilirsiniz.",
-        "#f3f4f6"
+        "#f3f4f6", { keepResult: true }
       );
     } else {
+      renderUserResult(data);
       photoSection.classList.add("hidden");
     }
   } catch (e) {
     clearProductLookupSlowTimer();
+    if (session !== accountGeneration) return;
     setBackendResult(e.payload || { error: e.message });
     const waitSeconds = e.payload?.meta?.sourceLookup?.retryAfterSeconds;
     const message = Number.isFinite(waitSeconds) && waitSeconds > 0
@@ -956,7 +1000,7 @@ async function loadImageFromFile(file) {
     const img = await new Promise((resolve, reject) => {
       const im = new Image();
       im.onload = () => resolve(im);
-      im.onerror = reject;
+      im.onerror = () => reject(new Error("Fotoğraf açılamadı. JPEG veya PNG seçin ya da etiketi yeniden çekin."));
       im.src = imgUrl;
     });
 
@@ -1037,6 +1081,7 @@ async function analyzePhotoFlow() {
   if (!photoAttempt || photoAttempt.barcode !== barcode || files.some((file, index) => photoAttempt.files[index] !== file)) {
     photoAttempt = { barcode, files, id: crypto.randomUUID() };
   }
+  const requestId = photoAttempt.id;
   photoAnalysisInFlight = true;
   for (const button of photoSection.querySelectorAll("button")) button.disabled = true;
   cancel.disabled = false;
@@ -1047,27 +1092,28 @@ async function analyzePhotoFlow() {
   try {
     setBackendResult("Fotoğraf analizi sürüyor; henüz yeni bir sonuç yok.");
     const images = [
-      await buildImagePayload("front", photoFiles.front),
-      await buildImagePayload("ingredients", photoFiles.ingredients)
+      await buildImagePayload("front", files[0]),
+      await buildImagePayload("ingredients", files[1])
     ];
 
-    if (photoFiles.extra) {
-      images.push(await buildImagePayload("extra", photoFiles.extra));
+    if (files[2]) {
+      images.push(await buildImagePayload("extra", files[2]));
     }
 
-    controller.signal.throwIfAborted();
+    if (controller.signal.aborted) return;
     const data = await accountRequest("/analyze-images", {
       method: "POST",
       signal: controller.signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         barcode: barcode || undefined,
-        requestId: photoAttempt.id,
+        requestId,
         images,
         externalProcessingConsent: true,
         externalProcessingConsentVersion: "2026-11-03.3"
       })
     }, 65000);
+    if (controller.signal.aborted) return;
     photoAttempt = null;
 
     setBackendResult(data);
@@ -1112,6 +1158,7 @@ function handlePhotoSelected(role, file) {
   photoFiles[role] = file;
   updatePhotoProgress();
   if (replacing) {
+    setBackendResult("Fotoğraf değiştirildi; henüz yeni bir sonuç yok.");
     setUserMessage("Fotoğraf değiştirildi", "Güncel sonuç için seçili tüm fotoğraflarla yeniden analiz edin.", "#fef3c7");
     return;
   }
@@ -1139,6 +1186,9 @@ async function analyzeTextFromDebug() {
     return;
   }
 
+  const session = accountGeneration;
+  setUserMessage('Etiket analiz ediliyor', 'Yeni sonuç hazırlanıyor.');
+  setBackendResult('Etiket analizi sürüyor; henüz yeni bir sonuç yok.');
   try {
     const data = await accountRequest("/analyze-label", {
       method: "POST",
@@ -1149,9 +1199,11 @@ async function analyzeTextFromDebug() {
       })
     });
 
+    if (session !== accountGeneration) return;
     setBackendResult(data);
     renderUserResult(data);
   } catch (e) {
+    if (session !== accountGeneration) return;
     setBackendResult("Backend hatası: " + e.message);
   }
 }
@@ -1166,7 +1218,10 @@ barcodeInputEl.addEventListener("keydown", event => {
 });
 
 startCameraBtn.addEventListener("click", startCameraScan);
-stopCameraBtn.addEventListener("click", stopCameraScan);
+stopCameraBtn.addEventListener("click", async () => {
+  await stopCameraScan();
+  startCameraBtn.focus();
+});
 
 choosePhotoBtn.addEventListener("click", () => {
   const input = PHOTO_STEPS[currentPhotoStep]?.input;
@@ -1203,8 +1258,11 @@ analyzeTextBtn.addEventListener("click", analyzeTextFromDebug);
 document.getElementById("contributionForm").addEventListener("submit", async event => {
   event.preventDefault();
   const button = document.getElementById("submitContributionBtn");
+  if (button.disabled) return;
   if (!accessToken) { document.getElementById("contributionStatus").textContent = "Önce hesabınıza giriş yapın."; return; }
   if (!currentContributionContext?.token) { document.getElementById("contributionStatus").textContent = "Katkı için geçerli bir tarama sonucu gerekli. Ürünü yeniden tarayın."; return; }
+  const session = accountGeneration, context = currentContributionContext;
+  const isCurrent = () => session === accountGeneration && context === currentContributionContext;
   const kind = document.getElementById("contributionKind").value;
   const note = document.getElementById("contributionNote").value;
   const structuredFields = kind === "new_product"
@@ -1218,10 +1276,11 @@ document.getElementById("contributionForm").addEventListener("submit", async eve
   button.disabled = true;
   try {
     const mediaIds = [];
-    for (const [role, inputId] of [["front_label","contributionFrontPhoto"],["ingredients_panel","contributionIngredientsPhoto"],["extra","contributionExtraPhoto"]]) {
+    for (const role of Object.keys(contributionPhotoFiles)) {
       if (!contributionStagedMedia[role] && contributionPhotoFiles[role]) {
         document.getElementById("contributionStatus").textContent = "Fotoğraflar doğrulanıp özel alana yükleniyor…";
         const image = await prepareImageBlob(contributionPhotoFiles[role], 1280, 0.82);
+        if (!isCurrent()) return;
         if (!image) throw new Error("Fotoğraf dönüştürülemedi. Başka bir görsel deneyin.");
         const uploaded = await requestJson("/contributions/media", { method: "POST", headers: {
           "Content-Type": "image/jpeg", Authorization: `Bearer ${accessToken}`,
@@ -1230,6 +1289,7 @@ document.getElementById("contributionForm").addEventListener("submit", async eve
           "X-Contribution-Media-Role": role,
           "X-Moderation-Photo-Consent": CONTRIBUTION_PHOTO_CONSENT_VERSION
         }, body: image }, 35000);
+        if (!isCurrent()) return;
         contributionStagedMedia[role] = uploaded.media.id;
       }
       if (contributionStagedMedia[role]) mediaIds.push(contributionStagedMedia[role]);
@@ -1243,16 +1303,17 @@ document.getElementById("contributionForm").addEventListener("submit", async eve
     }
     document.getElementById("contributionStatus").textContent = "Katkı ve kanıtlar incelemeye gönderiliyor…";
     const result = await accountRequest("/contributions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ barcode: currentContributionContext.barcode, contextToken: currentContributionContext.token, idempotencyKey: contributionAttempt.idempotencyKey, kind, note, retentionConsent: document.getElementById("retentionConsent").checked, structuredFields, mediaIds }) });
+    if (!isCurrent()) return;
     document.getElementById("contributionStatus").textContent = result.message;
     document.getElementById("contributionForm").reset();
     clearContributionPhotos(false); contributionAttempt = null; updateContributionKindFields();
-    if (document.getElementById("contributionKind").value === "decision_dispute") {
+    if (kind === "decision_dispute") {
       userResultEl.replaceChildren();
       const pending = document.createElement("p");
       pending.textContent = "Bu sonuç itiraz nedeniyle yeniden incelenecek. Önceki sonucu uygunluk kanıtı olarak kullanmayın.";
       userResultEl.appendChild(pending);
     }
-  } catch (error) { document.getElementById("contributionStatus").textContent = error.message; }
+  } catch (error) { if (isCurrent()) document.getElementById("contributionStatus").textContent = error.message; }
   finally { button.disabled = false; }
 });
 
@@ -1277,4 +1338,30 @@ document.getElementById("moderationPhotoConsent").addEventListener("change", eve
 updateContributionKindFields();
 // Keep diagnostics available during the pilot; disable explicitly at public launch.
 if (window.EATSURE_CONFIG?.enableDebug === false) document.querySelector(".debug-shell").classList.add("hidden");
-window.addEventListener("pagehide", event => { if (!event.persisted) { for (const url of previewUrls.values()) URL.revokeObjectURL(url); for (const url of contributionPreviewUrls.values()) URL.revokeObjectURL(url); } });
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden || !cameraRunning) return;
+  stopCameraScan();
+  setUserMessage('Kamera durduruldu', 'Barkodu taramak için kamerayı yeniden açın veya barkodu elle girin.');
+});
+function updateConnectionNotice() {
+  const notice = document.getElementById('offlineNotice');
+  const offline = !navigator.onLine;
+  if (offline) {
+    notice.textContent = 'Bağlantı yok. Barkod ve fotoğraf sorguları için yeniden internete bağlanın.';
+    document.getElementById('scanAnnouncement').textContent = notice.textContent;
+  } else if (notice.textContent) {
+    notice.textContent = '';
+    document.getElementById('scanAnnouncement').textContent = 'Bağlantı yeniden kuruldu.';
+  }
+}
+window.addEventListener('offline', updateConnectionNotice);
+window.addEventListener('online', updateConnectionNotice);
+updateConnectionNotice();
+window.addEventListener("pagehide", event => {
+  stopCameraScan();
+  activePhotoRequest?.abort();
+  if (!event.persisted) {
+    for (const url of previewUrls.values()) URL.revokeObjectURL(url);
+    for (const url of contributionPreviewUrls.values()) URL.revokeObjectURL(url);
+  }
+});

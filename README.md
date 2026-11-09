@@ -1,6 +1,6 @@
 # EatSure frontend
 
-Static mobile application at https://ohakoglu.github.io/eatsure-frontend/. The three views are `#tara` (scanner), `#profil` (account) and `#admin` (review). Hash navigation works on GitHub Pages, preserves an in-progress analysis, and stops the scanner camera when leaving that view.
+Static mobile application at https://ohakoglu.github.io/eatsure-frontend/. The three views are `#tara` (scanner), `#profil` (account) and `#admin` (review). The barcode camera stops when leaving the scanner or putting the page in the background. Open it again when returning. The web manifest supplies launch metadata. Queries require an internet connection.
 
 Configure the API origin before `app.js` using `window.EATSURE_CONFIG = { backendBase: "https://your-api.example" }`; the production Render API is the fallback. The backend must allow the frontend origin. Load `accounts.js` after `app.js`.
 
@@ -8,9 +8,9 @@ Configure the API origin before `app.js` using `window.EATSURE_CONFIG = { backen
 
 The profile shows verified account information and role, edits the display name, and lists the last 100 own contributions with reviewer notes and withdrawal. Reviewers/admins get a searchable queue, further-information/rejection actions, verified-label publication and a read-only daily shared-budget summary. Approval requires independently checked evidence and the backend recalculates the decision. No user-role assignment, API keys or budget-changing controls exist in the client.
 
-Tokens stay in memory, not browser storage. Refresh/sign-out clears the application session. Session expiry, revoked access and late responses cannot leave protected information in the page. All user/model/reviewer content is rendered as text. Role labels are not an authorization boundary; the API verifies every privileged operation.
+Tokens stay in memory. Refresh and sign-out require a fresh login. On session expiry or revocation, private review content and open image previews are cleared. The API verifies every privileged operation. Reviewers can enlarge images without leaving the review and reload an expired link from the authorized evidence list.
 
-New accounts use a private single-use activation link supplied by an authorized operator. The proof is removed from the address and verified after the owner presses the activation button; the owner then chooses a password. No setup links belong in this repository. Email recovery is shown only when the backend reports a verified configuration. Production has no custom SMTP and keeps this action disabled. See backend `docs/ACCOUNTS_2026-11-05.md` for provisioning and security details. There is no public self-service signup.
+An account request goes to review. Approved users receive a private single-use activation link through the configured account process. The proof is removed from the address and verified after the user presses the activation button. Keep that tab open until the password is set. If an interrupted setup cannot reuse its link, ask the issuer for a new one. The API controls whether email recovery is available.
 
 ## Product analysis
 
@@ -22,4 +22,4 @@ During the pilot, the Debug / Karar ayrıntıları button is visible and its pan
 
 ## Verification
 
-Run `npm test` from the sibling backend. Browser tests use local static serving, Chromium and mocked endpoints; no paid OCR/LLM calls or outgoing email. They cover scanner regression, mobile profile/admin layout, authorization, editing, withdrawal, moderation, password setup, stale response protection and camera cleanup.
+Run `npm test` from the matching backend with `EATSURE_FRONTEND_PATH` set to this checkout. Browser tests use local static serving, Chromium and mocked endpoints. The backend mobile verification guide also covers desktop WebKit and physical iPhone checks.

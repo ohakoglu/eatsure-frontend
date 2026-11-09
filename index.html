@@ -29,6 +29,8 @@
     <a href="#admin" data-page="admin">Yönetim</a>
   </nav>
   <div id="scanPage" class="page-view">
+  <p id="scanAnnouncement" class="sr-only" role="status" aria-atomic="true"></p>
+  <p id="offlineNotice" class="offline-notice"></p>
   <section class="card" id="startSection">
     <h2>Başlayalım</h2>
     <p class="muted small">Bir yol seç. Gerekirse sonraki adımı EatSure açacak.</p>
@@ -99,7 +101,7 @@
   </section>
 
   <section class="card hidden" id="statusSection">
-    <div id="userStatus" class="status-message" role="status" aria-live="polite"></div>
+    <div id="userStatus" class="status-message"></div>
     <button id="retryBtn" class="btn btn-secondary hidden">Tekrar dene</button>
   </section>
 
@@ -125,7 +127,7 @@
         <label for="contributionIngredientsPhoto">İçindekiler / alerjen yüzü</label><input id="contributionIngredientsPhoto" type="file" accept="image/jpeg,image/png,image/webp" />
         <label for="contributionExtraPhoto">Ek fotoğraf</label><input id="contributionExtraPhoto" type="file" accept="image/jpeg,image/png,image/webp" />
         <div id="contributionPhotoPreviews" class="contribution-photo-grid" aria-live="polite"></div>
-        <label class="check-label"><input id="moderationPhotoConsent" type="checkbox" /> Eklediğim katkı fotoğraflarının yalnız inceleme için özel alanda en fazla 30 gün saklanmasını, sonra silinmesini kabul ediyorum. Bu onay, analiz fotoğraflarından ayrıdır.</label>
+        <label class="check-label"><input id="moderationPhotoConsent" type="checkbox" /> Eklediğim katkı fotoğraflarının inceleme için özel alana kaydedilmesini, inceleme süresi dolunca erişimin kapatılıp silme işleminin başlatılmasını kabul ediyorum. Bu onay, analiz fotoğraflarından ayrıdır.</label>
       </fieldset>
       <button id="submitContributionBtn" class="btn btn-secondary" type="submit">İncelemeye gönder</button>
     </form>
@@ -158,12 +160,21 @@
     </section>
   </section>
 
+  <details class="card">
+    <summary>Kullanım, fotoğraflar ve hata bildirme</summary>
+    <p>EatSure ücretsizdir. Sorgu için hesabınla giriş yap. Fotoğraf analizi hakkın azaldığında ekranda uyarı görürsün. Ortak günlük kapasite dolarsa daha sonra tekrar deneyebilirsin.</p>
+    <p>Analiz fotoğrafları ve çıkarılan metin EatSure veritabanına kaydedilmez. Fotoğraflar, onay verdiğinde analiz sağlayıcılarına gönderilir ve onların saklama koşullarına tabidir. Kişisel bilgi içeren fotoğraf yükleme.</p>
+    <p>İnceleme için gönderilen katkı fotoğrafları ayrı onayla özel alana kaydedilir. Süre dolduğunda uygulama fotoğrafa erişimi kapatır ve silme işlemini başlatır. Katkını <a href="#profil">Hesabım</a> üzerinden geri çekebilirsin. Onaylanarak yayımlanan ürün bilgisi ve inceleme kaydı ayrı tutulur.</p>
+    <p>Yanlış ürün eşleşmesi veya gluten kararı gördüğünde sonucun altındaki “Bilgi düzeltme veya sonuca itiraz” bölümünü kullan.</p>
+  </details>
+
   </div>
 
   <section id="profilePage" class="page-view hidden" aria-labelledby="profileHeading">
     <header class="page-heading"><p class="eyebrow">HESABIM</p><h2 id="profileHeading" tabindex="-1">Profilim</h2><p class="muted">Hesap bilgilerin ve EatSure’a gönderdiğin katkılar.</p></header>
     <section class="card">
-      <div id="authChoice"><h3>EatSure hesabı</h3><button id="showLoginBtn" class="btn btn-primary" type="button">Giriş yap</button> <button id="showRequestBtn" class="btn btn-secondary" type="button">Yeni kullanıcı oluştur</button><p id="sessionStatus" role="status" aria-live="polite">Bir sonraki adımını seç.</p></div>
+      <div id="authChoice"><h3>EatSure hesabı</h3><button id="showLoginBtn" class="btn btn-primary" type="button">Giriş yap</button> <button id="showRequestBtn" class="btn btn-secondary" type="button">Yeni kullanıcı oluştur</button></div>
+      <p id="sessionStatus" role="status">Bir sonraki adımını seç.</p>
       <form id="accountRequestForm" class="account-form hidden"><label for="requestName">Ad</label><input id="requestName" class="input" maxlength="80" required><label for="requestEmail">E-posta</label><input id="requestEmail" class="input" type="email" maxlength="254" required><button class="btn btn-primary">Onay için gönder</button><button id="cancelRequestBtn" class="btn btn-secondary" type="button">Geri</button></form><p id="requestStatus" role="status" aria-live="polite"></p>
       <form id="loginForm" class="account-form hidden">
         <label for="emailInput">E-posta</label><input class="input" id="emailInput" type="email" autocomplete="username" required maxlength="254" />
@@ -176,12 +187,13 @@
       <button id="logoutBtn" class="btn btn-secondary hidden">Oturumu kapat</button>
     </section>
     <section id="activationCard" class="card hidden">
-      <h3>Hesabını aç</h3><p>Bu tek kullanımlık bağlantıyı doğrulayarak parolanı belirleyebilirsin.</p>
+      <h3>Hesabını aç</h3><p>Bu tek kullanımlık bağlantıyı doğrulayarak parolanı belirleyebilirsin. Sayfayı yenilersen, doğrulamadan önce gelen bağlantıyı tekrar açman gerekir.</p>
       <button id="activateAccountBtn" class="btn btn-primary" type="button">Bağlantıyı doğrula ve devam et</button>
       <p id="activationStatus" class="feedback" role="status" aria-live="polite"></p>
     </section>
     <section id="passwordSetup" class="card hidden">
       <h3>Parolanı belirle</h3>
+      <p>Parolanı kaydedene kadar bu sekmeyi açık tut. Kurulum yarıda kalırsa ve bağlantı tekrar çalışmazsa daveti veren kişiden yeni bir bağlantı iste.</p>
       <form id="passwordSetupForm" class="account-form">
         <label for="newPasswordInput">Yeni parola (en az 12 karakter)</label><input id="newPasswordInput" class="input" type="password" autocomplete="new-password" minlength="12" maxlength="128" required />
         <label for="confirmPasswordInput">Yeni parola tekrar</label><input id="confirmPasswordInput" class="input" type="password" autocomplete="new-password" minlength="12" maxlength="128" required />
@@ -250,6 +262,13 @@
       </section>
     </div>
   </section>
+  <dialog id="reviewImageDialog" class="review-image-dialog" aria-labelledby="reviewImageTitle">
+    <div class="section-heading">
+      <h2 id="reviewImageTitle">Katkı fotoğrafı</h2>
+      <form method="dialog"><button class="btn btn-secondary" autofocus>Kapat</button></form>
+    </div>
+    <div id="reviewImageContent"></div>
+  </dialog>
 </main>
 
 <script

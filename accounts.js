@@ -14,6 +14,7 @@ let selectedReview = null;
 let queueGeneration = 0;
 let historyGeneration = 0;
 let reviewMediaGeneration = 0;
+let reviewAccessGeneration = 0;
 let passwordSetup = false;
 let authOptionsLoaded = false;
 let activationToken = null;
@@ -73,35 +74,70 @@ function updateSession() {
     !accountProfile ? 'Yönetim yetkisi henüz doğrulanamadı. Profil sayfasından yeniden deneyebilirsin.' : 'Bu hesabın yönetim yetkisi yok. Kendi katkılarını Profilim sayfasından takip edebilirsin.';
 }
 
+function clearReviewDetail() {
+  reviewMediaGeneration++;
+  selectedReview = null;
+  activeReviewClaim = false;
+  activeReviewPreview = null;
+  closeReviewImage();
+  for (const id of ['reviewBarcode', 'reviewContext', 'reviewNote', 'reviewClaimStatus', 'reviewStructuredFields',
+    'reviewPriorProduct', 'reviewPreview', 'reviewMedia', 'reviewStatus']) accountEl(id).replaceChildren();
+  accountEl('reviewForm').reset();
+  for (const id of ['reviewDetail', 'reviewPreview', 'releaseReviewBtn']) accountEl(id).classList.add('hidden');
+}
+
+function clearReviewAccess() {
+  reviewAccessGeneration++;
+  queueGeneration++;
+  queueRequestGeneration++;
+  reviewItems = [];
+  clearReviewDetail();
+  for (const id of ['reviewQueue', 'budgetSummary', 'accountRequests', 'queueCount', 'adminStatus']) accountEl(id).replaceChildren();
+}
+
 function clearAccountSession(message) {
   activePhotoRequest?.abort();
-  photoAttempt = null;
-  accountEl('photoQuotaNotice').textContent = '';
-  accountGeneration++; queueGeneration++;queueRequestGeneration++; historyGeneration++; reviewMediaGeneration++;activeReviewClaim=false;
-  clearTimeout(expiryTimer); accessToken = null; accountProfile = null; reviewItems = []; selectedReview = null;
+  stopCameraScan();
+  clearProductLookupSlowTimer();
+  resetPhotoSelection();
+  clearContributionPhotos(false);
+  currentContributionContext = null;
+  contributionAttempt = null;
+  setBackendResult('Henüz sonuç yok.');
+  hideRetry();
+  barcodeInputEl.value = '';
+  ocrTextEl.value = '';
+  userResultEl.replaceChildren();
+  userStatusEl.replaceChildren();
+  for (const id of ['scanAnnouncement', 'contributionContextLabel', 'photoQuotaNotice']) accountEl(id).textContent = '';
+  for (const id of ['photoSection', 'resultSection', 'statusSection']) accountEl(id).classList.add('hidden');
+  accountGeneration++; historyGeneration++;
+  clearTimeout(expiryTimer); accessToken = null; accountProfile = null;
+  clearReviewAccess();
   passwordSetup = false; accountEl('passwordSetupForm').reset(); accountEl('passwordStatus').textContent = '';
   activationToken = null; accountEl('activationStatus').textContent = '';
-  for (const id of ['profileEmail', 'profileCreated', 'profileVerified', 'profileRole', 'contributionHistory', 'reviewQueue', 'budgetSummary', 'reviewNote', 'reviewBarcode', 'reviewContext', 'reviewClaimStatus','reviewStructuredFields', 'reviewMedia', 'queueCount', 'profileStatus', 'reviewStatus', 'adminStatus', 'contributionStatus']) accountEl(id).replaceChildren();
-  for (const id of ['loginForm', 'profileForm', 'reviewForm', 'contributionForm']) accountEl(id).reset();
-  accountEl('reviewDetail').classList.add('hidden');accountEl('releaseReviewBtn').classList.add('hidden');
+  for (const id of ['profileEmail', 'profileCreated', 'profileVerified', 'profileRole', 'contributionHistory', 'profileStatus', 'contributionStatus']) accountEl(id).replaceChildren();
+  for (const id of ['loginForm', 'profileForm', 'contributionForm']) accountEl(id).reset();
+  updateContributionKindFields();
   updateSession();
   if (message) accountEl('sessionStatus').textContent = message;
 }
 
 async function accountRequest(path, options = {}, timeoutMs) {
   const token = accessToken, generation = accountGeneration;
+  const reviewGeneration = reviewAccessGeneration;
   if (!token) throw new Error('Önce hesabına giriş yap.');
   try {
     const data = await requestJson(path, { ...options, headers: { ...options.headers, Authorization: `Bearer ${token}` } }, timeoutMs);
     if (generation !== accountGeneration || token !== accessToken) throw new Error('Oturum değişti. Yeniden giriş yap.');
+    if (path.startsWith('/review/') && reviewGeneration !== reviewAccessGeneration) throw new Error('İnceleme yetkisi değişti.');
     return data;
   } catch (error) {
-    if (error.status === 403 && generation === accountGeneration) {
+    if (error.status === 403 && generation === accountGeneration && reviewGeneration === reviewAccessGeneration) {
       // Clear previously displayed privileged data immediately after a role revocation.
-      accountProfile = null; reviewItems = []; selectedReview = null; queueGeneration++;
-      accountEl('reviewQueue').replaceChildren(); accountEl('budgetSummary').replaceChildren();
-      accountEl('reviewNote').replaceChildren(); accountEl('reviewBarcode').replaceChildren();
-      accountEl('reviewForm').reset(); accountEl('reviewDetail').classList.add('hidden'); updateSession();
+      accountProfile = null;
+      clearReviewAccess();
+      updateSession();
       error.message = 'Yönetim yetkisi doğrulanamadı. Profilini yeniden yükle.';
     }
     throw error;
@@ -113,6 +149,7 @@ async function loadProfile() {
   accountEl('sessionStatus').textContent = 'Profil yükleniyor…';
   try {
     const { profile } = await accountRequest('/profile');
+    if (canReview() && !['admin', 'reviewer'].includes(profile.role)) clearReviewAccess();
     accountProfile = profile;
     accountEl('profileEmail').textContent = profile.email;
     accountEl('profileCreated').textContent = readableDate(profile.createdAt);
@@ -203,7 +240,7 @@ async function loadAdmin() {
   const generation = ++queueGeneration, session = accountGeneration;
   accountEl('refreshAdminBtn').disabled = true;
   accountEl('adminStatus').textContent = 'Kuyruk yükleniyor…';
-  accountEl('reviewDetail').classList.add('hidden'); selectedReview = null;
+  clearReviewDetail();
   queueRequestGeneration++;reviewItems = []; accountEl('reviewQueue').replaceChildren(); accountEl('queueCount').textContent = '';
   accountEl('budgetSummary').textContent = 'Kullanım yükleniyor…';
   // A summary failure must not hide a usable review queue, or vice versa.
@@ -235,7 +272,8 @@ function syncReviewFields() {
 function openReview(item) {
   if (!canReview()) return;
   const priorReview=selectedReview;if(priorReview&&activeReviewClaim&&priorReview.id!==item.id)accountRequest('/review/'+encodeURIComponent(priorReview.id)+'/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'release'})}).catch(()=>{});
-  selectedReview = item; activeReviewPreview=null;activeReviewClaim=false; accountEl('reviewForm').reset(); syncReviewFields();
+  clearReviewDetail();
+  selectedReview = item; syncReviewFields();
   accountEl('reviewClaimStatus').textContent='İnceleme üstleniliyor…';accountEl('releaseReviewBtn').classList.add('hidden');
   accountEl('reviewStatus').textContent = '';
   accountEl('reviewBarcode').textContent = `${item.barcode} · ${KIND_NAMES[item.kind] || 'Katkı'}`;
@@ -276,15 +314,52 @@ async function loadReviewMedia(item) {
     const labels = { front_label: 'Ürün ön yüzü', ingredients_panel: 'İçindekiler / alerjen yüzü', extra: 'Ek fotoğraf' };
     for (const photo of media || []) {
       const card = document.createElement('figure'); card.className = 'contribution-photo-card';
-      const image = document.createElement('img'); image.src = photo.url; image.alt = labels[photo.role] || 'Katkı fotoğrafı';
-      const caption = document.createElement('figcaption'); caption.textContent = labels[photo.role] || 'Katkı fotoğrafı';
-      card.append(image, caption); container.append(card);
+      const label = labels[photo.role] || 'Katkı fotoğrafı';
+      const image = document.createElement('img'); image.referrerPolicy = 'no-referrer'; image.alt = label; image.src = photo.url;
+      const caption = textNode('figcaption', label);
+      const enlarge = textNode('button', label + ' fotoğrafını büyüt', 'btn btn-secondary btn-small');
+      enlarge.type = 'button';
+      enlarge.addEventListener('click', () => {
+        if (!canReview() || generation !== reviewMediaGeneration || selectedReview?.id !== item.id) return;
+        accountEl('reviewImageTitle').textContent = label;
+        accountEl('reviewImageContent').replaceChildren(image.cloneNode());
+        accountEl('reviewImageDialog').showModal();
+      });
+      image.addEventListener('error', () => {
+        if (generation !== reviewMediaGeneration || !card.isConnected) return;
+        enlarge.disabled = true;
+        caption.textContent = label + ' açılamadı. Bağlantıyı yenilemek için fotoğrafları yeniden yükle.';
+      });
+      card.append(image, caption, enlarge); container.append(card);
     }
+    if (media?.length) addReviewMediaRetry(container, item, generation);
     if (!media?.length) container.textContent = 'Bu katkıya bağlı saklanan fotoğraf yok.';
   } catch {
-    if (generation === reviewMediaGeneration && selectedReview?.id === item.id) container.textContent = 'Fotoğraflar şu anda açılamıyor.';
+    if (generation === reviewMediaGeneration && selectedReview?.id === item.id) {
+      container.textContent = 'Fotoğraflar şu anda açılamıyor.';
+      addReviewMediaRetry(container, item, generation);
+    }
   }
 }
+
+function addReviewMediaRetry(container, item, generation) {
+  const retry = textNode('button', 'Fotoğrafları yeniden yükle', 'btn btn-secondary btn-small');
+  retry.type = 'button';
+  retry.addEventListener('click', () => {
+    if (canReview() && generation === reviewMediaGeneration && selectedReview?.id === item.id) loadReviewMedia(item);
+  });
+  container.append(retry);
+}
+
+function closeReviewImage() {
+  const dialog = accountEl('reviewImageDialog');
+  if (dialog.open) dialog.close();
+  accountEl('reviewImageContent').replaceChildren();
+  accountEl('reviewImageTitle').textContent = 'Katkı fotoğrafı';
+}
+accountEl('reviewImageDialog').addEventListener('close', () => {
+  if (!accountEl('reviewImageDialog').open) closeReviewImage();
+});
 
 function routeAccountPage() {
   const page = currentAccountPage();
@@ -294,6 +369,7 @@ function routeAccountPage() {
   }
   document.title = page === 'profile' ? 'Profilim · EatSure' : page === 'admin' ? 'Yönetim · EatSure' : 'EatSure';
   if (page !== 'scan') { stopCameraScan(); accountEl(page === 'profile' ? 'profileHeading' : 'adminHeading').focus(); }
+  if (page !== 'admin') closeReviewImage();
   updateSession();
   if (page === 'profile' && accessToken) loadProfile();
   if (page === 'admin' && canReview()) loadAdmin();
@@ -321,7 +397,10 @@ accountEl('loginForm').addEventListener('submit', async event => {
   } catch (error) { if (generation === accountGeneration) accountEl('sessionStatus').textContent = error.message; }
   finally { accountEl('passwordInput').value = ''; button.disabled = false; }
 });
-accountEl('logoutBtn').addEventListener('click', () => clearAccountSession());
+accountEl('logoutBtn').addEventListener('click', () => {
+  clearAccountSession('Oturum kapatıldı.');
+  accountEl('showLoginBtn').focus();
+});
 accountEl('reloadProfileBtn').addEventListener('click', loadProfile);
 accountEl('loadContributionsBtn').addEventListener('click', loadContributions);
 accountEl('profileForm').addEventListener('submit', async event => {
@@ -340,7 +419,14 @@ accountEl('queueFilter').addEventListener('change',()=>{reviewQueueState.status=
 accountEl('queuePreviousBtn').addEventListener('click',()=>{if(reviewQueueState.page>1){reviewQueueState.page--;loadReviewQueue();}});
 accountEl('queueNextBtn').addEventListener('click',()=>{if(reviewQueueState.page<reviewQueueState.totalPages){reviewQueueState.page++;loadReviewQueue();}});
 accountEl('reviewDecision').addEventListener('change', syncReviewFields);
-accountEl('closeReviewBtn').addEventListener('click', () => { const item=selectedReview;if(item&&activeReviewClaim)accountRequest('/review/'+encodeURIComponent(item.id)+'/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'release'})}).catch(()=>{});selectedReview = null;activeReviewClaim=false; reviewMediaGeneration++; accountEl('reviewDetail').classList.add('hidden'); });
+accountEl('closeReviewBtn').addEventListener('click', () => {
+  const item = selectedReview;
+  if (item && activeReviewClaim) accountRequest('/review/' + encodeURIComponent(item.id) + '/claim', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'release' })
+  }).catch(() => {});
+  clearReviewDetail();
+  (accountEl('reviewQueue').querySelector('button') || accountEl('adminHeading')).focus();
+});
 accountEl('releaseReviewBtn').addEventListener('click',async()=>{const item=selectedReview;if(!item||!activeReviewClaim)return;try{await accountRequest('/review/'+encodeURIComponent(item.id)+'/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'release'})});activeReviewClaim=false;activeReviewPreview=null;accountEl('reviewClaimStatus').textContent='İnceleme kuyruğa bırakıldı.';accountEl('releaseReviewBtn').classList.add('hidden');syncReviewFields();}catch(error){accountEl('reviewClaimStatus').textContent=error.message;}});
 accountEl('reviewForm').addEventListener('submit', async event => {
   event.preventDefault(); const button = accountEl('submitReviewBtn');
@@ -418,6 +504,9 @@ function handleAccountLocation() {
   } else routeAccountPage();
 }
 window.addEventListener('hashchange', handleAccountLocation);
+window.addEventListener('pagehide', event => {
+  if (event.persisted) clearAccountSession('Devam etmek için yeniden giriş yap.');
+});
 handleAccountLocation();
 
 async function openContributionDetail(contribution, card, generation) {
@@ -460,9 +549,9 @@ async function openContributionDetail(contribution, card, generation) {
   } catch(error){if(alive())panel.textContent=error.message;}
 }
 
-async function loadAccountRequests(){if(!canReview())return;try{const {requests}=await accountRequest('/review/account-requests');const list=accountEl('accountRequests');list.replaceChildren();for(const r of requests){const li=textNode('li',r.display_name+' · '+r.email,'record-card');const approve=textNode('button','Onayla ve davet gönder','btn btn-primary btn-small');approve.type='button';approve.addEventListener('click',async()=>{approve.disabled=true;try{await accountRequest('/review/account-requests/'+encodeURIComponent(r.id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'approved'})});await loadAccountRequests();}catch(e){li.append(textNode('p',e.message,'feedback'));approve.disabled=false;}});const reject=textNode('button','Reddet','btn btn-secondary btn-small');reject.type='button';reject.addEventListener('click',async()=>{await accountRequest('/review/account-requests/'+encodeURIComponent(r.id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'rejected'})});await loadAccountRequests();});li.append(approve,reject);list.append(li);}}catch(e){accountEl('adminStatus').textContent=e.message;}}
+async function loadAccountRequests(){if(!canReview())return;const generation=reviewAccessGeneration;try{const {requests}=await accountRequest('/review/account-requests');if(!canReview())return;const list=accountEl('accountRequests');list.replaceChildren();for(const r of requests){const li=textNode('li',r.display_name+' · '+r.email,'record-card');const approve=textNode('button','Onayla ve davet gönder','btn btn-primary btn-small');approve.type='button';approve.addEventListener('click',async()=>{approve.disabled=true;try{await accountRequest('/review/account-requests/'+encodeURIComponent(r.id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'approved'})});await loadAccountRequests();}catch(e){li.append(textNode('p',e.message,'feedback'));approve.disabled=false;}});const reject=textNode('button','Reddet','btn btn-secondary btn-small');reject.type='button';reject.addEventListener('click',async()=>{await accountRequest('/review/account-requests/'+encodeURIComponent(r.id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'rejected'})});await loadAccountRequests();});li.append(approve,reject);list.append(li);}}catch(e){if(generation===reviewAccessGeneration&&canReview())accountEl('adminStatus').textContent=e.message;}}
 
-accountEl('showLoginBtn').addEventListener('click',()=>{accountEl('loginForm').classList.remove('hidden');accountEl('accountRequestForm').classList.add('hidden');accountEl('authChoice').classList.add('hidden');});accountEl('showRequestBtn').addEventListener('click',()=>{accountEl('accountRequestForm').classList.remove('hidden');accountEl('loginForm').classList.add('hidden');accountEl('authChoice').classList.add('hidden');});accountEl('cancelRequestBtn').addEventListener('click',()=>{accountEl('accountRequestForm').classList.add('hidden');accountEl('authChoice').classList.remove('hidden');});accountEl('accountRequestForm').addEventListener('submit',async e=>{e.preventDefault();try{const r=await requestJson('/auth/requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({displayName:accountEl('requestName').value,email:accountEl('requestEmail').value})});accountEl('requestStatus').textContent=r.message;accountEl('accountRequestForm').reset();}catch(err){accountEl('requestStatus').textContent=err.message;}});
+accountEl('showLoginBtn').addEventListener('click',()=>{accountEl('loginForm').classList.remove('hidden');accountEl('accountRequestForm').classList.add('hidden');accountEl('authChoice').classList.add('hidden');accountEl('emailInput').focus();});accountEl('showRequestBtn').addEventListener('click',()=>{accountEl('accountRequestForm').classList.remove('hidden');accountEl('loginForm').classList.add('hidden');accountEl('authChoice').classList.add('hidden');accountEl('requestName').focus();});accountEl('cancelRequestBtn').addEventListener('click',()=>{accountEl('accountRequestForm').classList.add('hidden');accountEl('authChoice').classList.remove('hidden');accountEl('showRequestBtn').focus();});accountEl('accountRequestForm').addEventListener('submit',async e=>{e.preventDefault();try{const r=await requestJson('/auth/requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({displayName:accountEl('requestName').value,email:accountEl('requestEmail').value})});accountEl('requestStatus').textContent=r.message;accountEl('accountRequestForm').reset();}catch(err){accountEl('requestStatus').textContent=err.message;}});
 
 accountEl('previewReviewBtn').addEventListener('click',async()=>{if(!selectedReview||!canReview())return;const itemId=selectedReview.id;const v=verifiedLabelForm(selectedReview.barcode);const snapshot=JSON.stringify(v),button=accountEl('previewReviewBtn');button.disabled=true;try{const p=await accountRequest('/review/'+encodeURIComponent(itemId)+'/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({verifiedLabel:v})});const now=verifiedLabelForm(selectedReview?.barcode);if(selectedReview?.id!==itemId||JSON.stringify(now)!==snapshot)return;activeReviewPreview=p.previewId;const box=accountEl('reviewPreview');box.replaceChildren(textNode('h4','Sunucu karar önizlemesi'),textNode('p','Kayıt işlemi ve uygunluk kararı ayrı değerlendirilir. Kaynak bağlantısı biçimsel olarak geçerli; kaynağın doğruluğu ayrıca otomatik doğrulanmıyor.'),textNode('p','Sunucu kararı: '+p.decision.level),textNode('p','Karar kanıtı: '+JSON.stringify(p.evidence||[])));box.classList.remove('hidden');accountEl('submitReviewBtn').disabled=false;}catch(e){accountEl('reviewStatus').textContent=e.message;}finally{button.disabled=false;}});for(const id of ['verifiedName','verifiedBrand','verifiedSource','verifiedLabel','evidenceChecked','verifiedEvidenceKind','verifiedObservedOn','verifiedLabelDate'])accountEl(id).addEventListener('input',()=>{activeReviewPreview=null;accountEl('submitReviewBtn').disabled=accountEl('reviewDecision').value==='approved';accountEl('reviewPreview').classList.add('hidden');});
 accountEl('continueUserBtn').addEventListener('click',()=>{location.hash='#tara';});accountEl('continueAdminBtn').addEventListener('click',()=>{if(canReview())location.hash='#admin';});
