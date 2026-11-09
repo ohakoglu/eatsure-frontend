@@ -1,5 +1,6 @@
 // Account state stays in this tab. Authorization always comes from the server.
 const accountEl = id => document.getElementById(id);
+const reviewImageDialog = accountEl('reviewImageDialog');
 const STATUS_NAMES = { pending: 'İnceleme bekliyor', needs_more_info: 'Ek bilgi bekliyor', rejected: 'Reddedildi', approved: 'Onaylandı', withdrawn: 'Geri çekildi', expired: 'Süresi doldu' };
 const KIND_NAMES = { decision_dispute: 'Sonuca itiraz', label_correction: 'Etiket düzeltme', new_product: 'Yeni ürün' };
 const ROLE_NAMES = { user: 'Kullanıcı', reviewer: 'İncelemeci', admin: 'Admin' };
@@ -109,7 +110,8 @@ function clearAccountSession(message) {
   ocrTextEl.value = '';
   userResultEl.replaceChildren();
   userStatusEl.replaceChildren();
-  for (const id of ['scanAnnouncement', 'contributionContextLabel', 'photoQuotaNotice']) accountEl(id).textContent = '';
+  announceScan('');
+  for (const id of ['contributionContextLabel', 'photoQuotaNotice']) accountEl(id).textContent = '';
   for (const id of ['photoSection', 'resultSection', 'statusSection']) accountEl(id).classList.add('hidden');
   accountGeneration++; historyGeneration++;
   clearTimeout(expiryTimer); accessToken = null; accountProfile = null;
@@ -323,14 +325,16 @@ async function loadReviewMedia(item) {
         if (!canReview() || generation !== reviewMediaGeneration || selectedReview?.id !== item.id) return;
         accountEl('reviewImageTitle').textContent = label;
         accountEl('reviewImageContent').replaceChildren(image.cloneNode());
-        accountEl('reviewImageDialog').showModal();
+        reviewImageDialog.showModal();
       });
       image.addEventListener('error', () => {
         if (generation !== reviewMediaGeneration || !card.isConnected) return;
         enlarge.disabled = true;
         caption.textContent = label + ' açılamadı. Bağlantıyı yenilemek için fotoğrafları yeniden yükle.';
       });
-      card.append(image, caption, enlarge); container.append(card);
+      card.append(image, caption);
+      if (typeof reviewImageDialog?.showModal === 'function') card.append(enlarge);
+      container.append(card);
     }
     if (media?.length) addReviewMediaRetry(container, item, generation);
     if (!media?.length) container.textContent = 'Bu katkıya bağlı saklanan fotoğraf yok.';
@@ -352,13 +356,13 @@ function addReviewMediaRetry(container, item, generation) {
 }
 
 function closeReviewImage() {
-  const dialog = accountEl('reviewImageDialog');
-  if (dialog.open) dialog.close();
+  if (!reviewImageDialog) return;
+  if (reviewImageDialog.open) reviewImageDialog.close();
   accountEl('reviewImageContent').replaceChildren();
   accountEl('reviewImageTitle').textContent = 'Katkı fotoğrafı';
 }
-accountEl('reviewImageDialog').addEventListener('close', () => {
-  if (!accountEl('reviewImageDialog').open) closeReviewImage();
+reviewImageDialog?.addEventListener('close', () => {
+  if (!reviewImageDialog.open) closeReviewImage();
 });
 
 function routeAccountPage() {

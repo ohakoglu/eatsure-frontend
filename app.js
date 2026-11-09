@@ -299,6 +299,11 @@ function setBackendResult(data) {
   }
 }
 
+function announceScan(message) {
+  const announcement = document.getElementById('scanAnnouncement');
+  if (announcement) announcement.textContent = message;
+}
+
 function setUserMessage(title, message, color = "#f3f4f6", options = {}) {
   if (!options.keepResult) {
     resultSection.classList.add("hidden");
@@ -316,7 +321,7 @@ function setUserMessage(title, message, color = "#f3f4f6", options = {}) {
   messageEl.textContent = message;
 
   userStatusEl.append(titleEl, messageEl);
-  document.getElementById('scanAnnouncement').textContent = `${title}. ${message}`;
+  announceScan(`${title}. ${message}`);
 }
 
 function setProductLookupBusy(isBusy) {
@@ -572,7 +577,7 @@ function renderUserResult(data) {
     userResultEl.appendChild(resolution);
   }
   document.getElementById("contributionSection").classList.toggle("hidden", !currentContributionContext);
-  document.getElementById('scanAnnouncement').textContent = `${ui.title}. ${reason}`;
+  announceScan(`${ui.title}. ${reason}`);
 }
 
 function isInsufficientResult(data) {
@@ -1345,13 +1350,14 @@ document.addEventListener('visibilitychange', () => {
 });
 function updateConnectionNotice() {
   const notice = document.getElementById('offlineNotice');
+  if (!notice) return;
   const offline = !navigator.onLine;
   if (offline) {
     notice.textContent = 'Bağlantı yok. Barkod ve fotoğraf sorguları için yeniden internete bağlanın.';
-    document.getElementById('scanAnnouncement').textContent = notice.textContent;
+    announceScan(notice.textContent);
   } else if (notice.textContent) {
     notice.textContent = '';
-    document.getElementById('scanAnnouncement').textContent = 'Bağlantı yeniden kuruldu.';
+    announceScan('Bağlantı yeniden kuruldu.');
   }
 }
 window.addEventListener('offline', updateConnectionNotice);
