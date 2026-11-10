@@ -97,6 +97,7 @@
     <button id="reanalyzeBtn" class="btn btn-secondary">Seçili tüm fotoğraflarla yeniden analiz et</button>
     <button id="cancelPhotoAnalysis" class="btn btn-secondary hidden" type="button">Analizi durdur</button>
     <p id="photoQuotaNotice" role="status" aria-live="polite"></p>
+    <a href="#profil" id="photoPilotProfileLink" class="hidden">Ek fotoğraf hakkı iste</a>
     <div id="photoProgress" class="photo-progress"></div>
   </section>
 
@@ -206,6 +207,10 @@
         <div class="section-heading"><h3>Hesap bilgileri</h3><span id="profileRole" class="badge"></span></div>
         <dl class="profile-details"><dt>E-posta</dt><dd id="profileEmail"></dd><dt>Üyelik tarihi</dt><dd id="profileCreated"></dd><dt>E-posta doğrulaması</dt><dd id="profileVerified"></dd></dl>
         <form id="profileForm" class="account-form"><label for="displayNameInput">Görünen ad</label><input id="displayNameInput" class="input" autocomplete="nickname" maxlength="80" required /><button id="saveProfileBtn" class="btn btn-primary" type="submit">Değişiklikleri kaydet</button></form>
+        <section id="photoPilotAccount" class="hidden" aria-label="Fotoğraf analiz hakkı">
+          <p id="photoPilotAccountStatus" role="status"></p>
+          <button id="photoPilotAsk" type="button" class="btn btn-secondary hidden">Ek fotoğraf hakkı iste</button>
+        </section>
         <p id="profileStatus" class="feedback" role="status" aria-live="polite"></p>
       </section>
       <section class="card">
@@ -224,6 +229,17 @@
       <section class="card">
         <div class="section-heading"><h3>Ortak günlük kullanım</h3><button id="refreshAdminBtn" class="btn btn-secondary btn-small">Yenile</button></div>
         <div id="budgetSummary" class="stats-grid" aria-live="polite"></div><section class="card"><h3>Hesap istekleri</h3><ul id="accountRequests" class="record-list"></ul></section>
+        <section id="photoPilotAdmin" class="card hidden">
+          <h3>Fotoğraf analizi pilotu</h3>
+          <p id="photoPilotAdminStatus" role="status"></p>
+          <form id="photoPilotEnroll" class="account-form">
+            <label for="photoPilotEmail">Davetli hesabın e-posta adresi</label>
+            <input id="photoPilotEmail" class="input" type="email" maxlength="254" required />
+            <button type="submit" class="btn btn-secondary">20 hakla pilota ekle</button>
+          </form>
+          <h4>Bekleyen ek hak istekleri</h4>
+          <ul id="photoPilotRequests" class="record-list"></ul>
+        </section>
         <p class="muted small">Tüm kullanıcıların OCR ve görsel kontrol çağrıları ortaktır. Tutarlar bütçe rezervasyonudur; fatura tutarı değildir. Kota Türkiye saatiyle 03.00’te yenilenir.</p>
       </section>
       <section class="card">
@@ -276,8 +292,8 @@ src="https://unpkg.com/@zxing/browser@0.2.0/umd/zxing-browser.min.js"
 onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.0/umd/zxing-browser.min.js'">
 </script>
 
-<script src="app.js?v=mobile-20261110"></script>
-<script src="accounts.js?v=mobile-20261110"></script>
+<script src="app.js?v=photo-pilot-1"></script>
+<script src="accounts.js?v=photo-pilot-1"></script>
 
 </body>
 </html>

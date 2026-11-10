@@ -93,6 +93,7 @@ function clearReviewAccess() {
   queueRequestGeneration++;
   reviewItems = [];
   clearReviewDetail();
+  clearPhotoPilotAdmin();
   for (const id of ['reviewQueue', 'budgetSummary', 'accountRequests', 'queueCount', 'adminStatus']) accountEl(id).replaceChildren();
 }
 
@@ -116,6 +117,9 @@ function clearAccountSession(message) {
   accountGeneration++; historyGeneration++;
   clearTimeout(expiryTimer); accessToken = null; accountProfile = null;
   clearReviewAccess();
+  accountEl('photoPilotAccount')?.classList.add('hidden');
+  accountEl('photoPilotAccountStatus')?.replaceChildren();
+  accountEl('photoPilotProfileLink')?.classList.add('hidden');
   passwordSetup = false; accountEl('passwordSetupForm').reset(); accountEl('passwordStatus').textContent = '';
   activationToken = null; accountEl('activationStatus').textContent = '';
   for (const id of ['profileEmail', 'profileCreated', 'profileVerified', 'profileRole', 'contributionHistory', 'profileStatus', 'contributionStatus']) accountEl(id).replaceChildren();
@@ -152,6 +156,7 @@ async function loadProfile() {
   try {
     const { profile } = await accountRequest('/profile');
     if (canReview() && !['admin', 'reviewer'].includes(profile.role)) clearReviewAccess();
+    if (profile.role !== 'admin') clearPhotoPilotAdmin();
     accountProfile = profile;
     accountEl('profileEmail').textContent = profile.email;
     accountEl('profileCreated').textContent = readableDate(profile.createdAt);
@@ -159,6 +164,7 @@ async function loadProfile() {
     accountEl('profileRole').textContent = ROLE_NAMES[profile.role] || ROLE_NAMES.user;
     accountEl('displayNameInput').value = profile.displayName || '';
     updateSession();
+    if (currentAccountPage() === 'profile') loadPhotoPilotAccount();
     await loadContributions();
     if (currentAccountPage() === 'admin' && canReview()) await loadAdmin();
   } catch (error) {
@@ -238,6 +244,7 @@ async function loadReviewQueue(){
 }
 
 async function loadAdmin() {
+  if (accountProfile?.role === 'admin') loadPhotoPilotAdmin();
   if (!canReview()) return;
   const generation = ++queueGeneration, session = accountGeneration;
   accountEl('refreshAdminBtn').disabled = true;
@@ -259,6 +266,84 @@ async function loadAdmin() {
   } else panel.append(textNode('p', summary.reason.message));
   accountEl('refreshAdminBtn').disabled = false;
 }
+
+function clearPhotoPilotAdmin() {
+  accountEl('photoPilotAdmin')?.classList.add('hidden');
+  accountEl('photoPilotRequests')?.replaceChildren();
+  accountEl('photoPilotAdminStatus')?.replaceChildren();
+  accountEl('photoPilotEnroll')?.reset();
+}
+
+async function loadPhotoPilotAccount(request = false) {
+  const panel = accountEl('photoPilotAccount');
+  if (!panel || !accessToken) return;
+  const generation = accountGeneration;
+  try {
+    const pilot = await accountRequest('/profile/photo-pilot', { method: request ? 'POST' : 'GET' });
+    if (pilot.state !== 'active' || pilot.remaining > 3) {
+      panel.classList.add('hidden');
+      if (pilot.state !== 'active' || pilot.remaining > 0) accountEl('photoPilotProfileLink')?.classList.add('hidden');
+      return;
+    }
+    panel.classList.remove('hidden');
+    accountEl('photoPilotAccountStatus').textContent = pilot.pending ? 'Ek hak isteğiniz yöneticiye iletildi.' :
+      pilot.remaining ? `${pilot.remaining} fotoğraf analizi hakkınız kaldı.` : 'Fotoğraf analizi hakkınız doldu.';
+    accountEl('photoPilotAsk').classList.toggle('hidden', pilot.pending || pilot.remaining !== 0);
+  } catch (error) {
+    if (request && generation === accountGeneration && accessToken) {
+      accountEl('photoPilotAccountStatus').textContent = error.message;
+    }
+  }
+}
+
+async function loadPhotoPilotAdmin(action) {
+  const panel = accountEl('photoPilotAdmin');
+  if (!panel || accountProfile?.role !== 'admin') return;
+  const generation = accountGeneration;
+  const reviewGeneration = reviewAccessGeneration;
+  const isCurrent = () => generation === accountGeneration && reviewGeneration === reviewAccessGeneration &&
+    accessToken && accountProfile?.role === 'admin';
+  try {
+    const pilot = await accountRequest('/review/photo-pilot', action ? {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(action)
+    } : {});
+    if (!isCurrent()) return;
+    if (pilot.state !== 'active') return clearPhotoPilotAdmin();
+    panel.classList.remove('hidden');
+    if (action?.email) accountEl('photoPilotEnroll').reset();
+    accountEl('photoPilotAdminStatus').textContent = `${pilot.used}/${pilot.total} analiz kullanıldı veya ayrıldı. ${pilot.unassigned} hak dağıtılabilir.`;
+    const list = accountEl('photoPilotRequests');
+    list.replaceChildren();
+    for (const request of pilot.requests) {
+      const item = textNode('li', request.email + ' ', 'record-card');
+      for (const [label, credits] of [['5 hak ver', 5], ['Reddet', 0]]) {
+        const button = textNode('button', label, 'btn btn-secondary btn-small');
+        button.type = 'button';
+        button.disabled = credits > pilot.unassigned || (credits > 0 && pilot.paused);
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          await loadPhotoPilotAdmin({ requestId: request.id, credits });
+          if (isCurrent()) button.disabled = false;
+        });
+        item.append(button);
+      }
+      list.append(item);
+    }
+  } catch (error) {
+    if (action && isCurrent()) accountEl('photoPilotAdminStatus').textContent = error.message;
+  }
+}
+
+accountEl('photoPilotAsk')?.addEventListener('click', async event => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  await loadPhotoPilotAccount(true);
+  button.disabled = false;
+});
+accountEl('photoPilotEnroll')?.addEventListener('submit', event => {
+  event.preventDefault();
+  loadPhotoPilotAdmin({ email: accountEl('photoPilotEmail').value });
+});
 
 let activeReviewPreview=null;
 function syncReviewFields() {

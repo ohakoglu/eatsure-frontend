@@ -1079,6 +1079,7 @@ async function analyzePhotoFlow() {
   const cancel = document.getElementById('cancelPhotoAnalysis');
   const quotaNotice = document.getElementById('photoQuotaNotice');
   quotaNotice.textContent = '';
+  document.getElementById('photoPilotProfileLink')?.classList.add('hidden');
   const controller = new AbortController();
   activePhotoRequest = controller;
   const barcode = (barcodeInputEl.value || '').trim();
@@ -1125,7 +1126,8 @@ async function analyzePhotoFlow() {
     renderUserResult(data);
     const remaining = data?.meta?.photoQuotaRemaining;
     if (Number.isInteger(remaining) && remaining >= 0 && remaining <= 3) {
-      quotaNotice.textContent = remaining ? `Bu ay ${remaining} fotoğraf analizi hakkınız kaldı.` : 'Bu ayki fotoğraf analizi hakkınız doldu.';
+      quotaNotice.textContent = remaining ? `${remaining} fotoğraf analizi hakkınız kaldı.` : 'Fotoğraf analizi hakkınız doldu.';
+      if (remaining === 0 && data.meta.photoPilot) document.getElementById('photoPilotProfileLink')?.classList.remove('hidden');
     }
 
     const extracted = data?.extracted;
@@ -1140,7 +1142,8 @@ async function analyzePhotoFlow() {
     setBackendResult({ error: e.message });
     setUserMessage("Analiz hatası", e.message, "#fee2e2");
     if (e.code === 'PHOTO_ALREADY_SUBMITTED') photoAttempt = null;
-    if (!['AUTH_REQUIRED', 'PHOTO_ACCOUNT_LIMIT'].includes(e.code)) showRetry(analyzePhotoFlow);
+    if (e.code === 'PHOTO_PILOT_ACCOUNT_LIMIT') document.getElementById('photoPilotProfileLink')?.classList.remove('hidden');
+    if (!['AUTH_REQUIRED', 'PHOTO_ACCOUNT_LIMIT', 'PHOTO_PILOT_ACCOUNT_LIMIT', 'PHOTO_PILOT_ACCESS'].includes(e.code)) showRetry(analyzePhotoFlow);
   } finally {
     if (activePhotoRequest === controller) activePhotoRequest = null;
     cancel.classList.add('hidden');
